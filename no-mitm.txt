@@ -1,0 +1,12 @@
+swscan.apple.com
+swdist.apple.com
+configuration.apple.com
+init.ess.apple.com
+identity.ess.apple.com
+profile.ess.apple.com
+p142-keyvalueservice.icloud.com
+profile.gc.apple.com
+
+b.aol.com
+data.flvrrz.cpm
+p67-bookmarks.icloud.com
