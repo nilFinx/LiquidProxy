@@ -1,0 +1,1 @@
+openssl.exe req -x509 -newkey rsa:4096 -subj /CN=LiquidProxy -nodes -days 999999 -keyout LiquidProxy-key.pem -out LiquidProxy-cert.pem
