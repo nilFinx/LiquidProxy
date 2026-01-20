@@ -12,6 +12,8 @@ Do NOT use any third party instanced of LiquidProxy, unless you trust them. Due 
 
 ## How to use (on server)
 
+Run either create-cert.bat or create-cert.sh to get certificates. Windows is .bat, anthing else is .sh.
+
 Run `make`, and you'll see HTTP and IMAP in build directory. Just run it.
 
 If you can't have GNU Make for some reason, just run `go build -o build/http.exe src/http/main.go` (replace .exe with nothing on Mac/Linux!!!), and replace http on the command with mail and do it again.
