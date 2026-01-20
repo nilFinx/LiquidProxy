@@ -201,11 +201,11 @@ func main() {
 
 	// Print single startup message
 	if !*disableIMAP && !*disableSMTP {
-		log.Printf("Aqua Mail Proxy started (IMAP:%d, SMTP:%d)", *imapPort, *smtpPort)
+		log.Printf("Liquid Mail Proxy started (IMAP:%d, SMTP:%d)", *imapPort, *smtpPort)
 	} else if !*disableIMAP {
-		log.Printf("Aqua Mail Proxy started (IMAP:%d)", *imapPort)
+		log.Printf("Liquid Mail Proxy started (IMAP:%d)", *imapPort)
 	} else if !*disableSMTP {
-		log.Printf("Aqua Mail Proxy started (SMTP:%d)", *smtpPort)
+		log.Printf("Liquid Mail Proxy started (SMTP:%d)", *smtpPort)
 	}
 	if *allowRemoteConnections {
 		log.Println("Remote connections are ALLOWED")
@@ -289,7 +289,7 @@ func (mp *MailProxy) handleConnection(clientConn net.Conn) {
 // handleIMAP handles IMAP protocol specifics
 func (mp *MailProxy) handleIMAP(mc *MailConnection) {
 	// Send initial IMAP greeting
-	greeting := "* OK AquaProxy IMAP server ready\r\n"
+	greeting := "* OK LiquidProxy IMAP server ready\r\n"
 	mc.writer.WriteString(greeting)
 	mc.writer.Flush()
 
@@ -501,7 +501,7 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection) {
 			mc.writer.Flush()
 
 		} else if command == "LOGOUT" {
-			mc.writer.WriteString("* BYE AquaProxy logging out\r\n")
+			mc.writer.WriteString("* BYE LiquidProxy logging out\r\n")
 			mc.writer.WriteString(fmt.Sprintf("%s OK LOGOUT completed\r\n", tag))
 			mc.writer.Flush()
 			return
@@ -517,7 +517,7 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection) {
 // handleSMTP handles SMTP protocol specifics
 func (mp *MailProxy) handleSMTP(mc *MailConnection) {
 	// Send initial SMTP greeting
-	greeting := "220 localhost AquaProxy SMTP server ready\r\n"
+	greeting := "220 localhost LiquidProxy SMTP server ready\r\n"
 	mc.writer.WriteString(greeting)
 	mc.writer.Flush()
 
