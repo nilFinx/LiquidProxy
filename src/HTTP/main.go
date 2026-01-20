@@ -14,7 +14,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/big"
 	"net"
@@ -58,7 +57,7 @@ var (
 	forceMITM              = flag.Bool("force-mitm", false, "Force MITM mode for all connections")
 	cpuProfile             = flag.Bool("cpu-profile", false, "Enable CPU profiling to legacy_proxy_cpu.prof")
 	removePrefix           = flag.Bool("remove-prefix", false, "Remove \"HTTP\" prefix in output")
-	allowRemoteConnections = !*flag.Bool("block-remote-connections", false, "Block connections from non-localhost addresses")
+	blockRemoteConnections = flag.Bool("block-remote-connections", false, "Block connections from non-localhost addresses")
 
 	// Command line flags from IMAP proxy (for compatibility with shared flags.txt)
 	_ = flag.Int("imap-port", 6532, "IMAP proxy port (ignored by HTTP proxy)")
@@ -582,18 +581,16 @@ func loadSystemCertPool() (*x509.CertPool, error) {
 }
 
 func main() {
-	if !*removePrefix {
-		log.SetPrefix("HTTP ")
-	}
-
 	// Read flags from flags.txt if it exists
-	if data, err := ioutil.ReadFile("flags.txt"); err == nil {
+	if data, err := os.ReadFile("flags.txt"); err == nil {
 		flags := strings.Fields(string(data))
 		os.Args = append([]string{os.Args[0]}, append(flags, os.Args[1:]...)...)
 	}
-
-	// Parse command line flags
 	flag.Parse()
+
+	if !*removePrefix {
+		log.SetPrefix("HTTP ")
+	}
 
 	// Setup CPU profiling if requested
 	if *cpuProfile {
@@ -690,7 +687,7 @@ func main() {
 	if *forceMITM {
 		log.Println("Force MITM mode is ENABLED")
 	}
-	if allowRemoteConnections {
+	if !*blockRemoteConnections {
 		log.Println("Remote connections are ALLOWED")
 	}
 	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(*httpPort), p))
@@ -795,7 +792,7 @@ func chaseAIA(certs []*x509.Certificate, rootCAs *x509.CertPool) ([]*x509.Certif
 			continue
 		}
 
-		certData, err := ioutil.ReadAll(resp.Body)
+		certData, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
 			log.Println("Failed to read AIA certificate:", err)
@@ -930,7 +927,12 @@ type Proxy struct {
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-	if !allowRemoteConnections {
+	if r.URL.Host == "liquidproxy.r.e.a.l" {
+		p.serveCertPlain(w, r)
+		return
+	}
+
+	if *blockRemoteConnections {
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
 			http.Error(w, "Invalid remote address", http.StatusBadRequest)
@@ -1065,7 +1067,9 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 	// Route based on client capabilities, redirect rules, and exclusion rules
 	if isExcluded {
 		// Domain is explicitly excluded from MITM - always use passthrough
-		log.Printf("[%s] Domain %s is excluded from MITM, using passthrough", connID, domain)
+		if *logURLs {
+			log.Printf("[%s] Domain %s is excluded from MITM, using passthrough", connID, domain)
+		}
 		p.passthroughConnection(clientConn, host, clientHello, connID)
 	} else if clientHello.isModernClient && !hasRedirects && !*forceMITM {
 		// Modern client detected, no redirects, and force MITM not enabled - use passthrough mode
@@ -1408,6 +1412,11 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 	}
 	cConfig.ServerName = name
 
+	if name == "liquidproxy.r.e.a.l" {
+		p.serveCert(tlsConn, host, name, clientHello, connID)
+		return
+	}
+
 	// Connect to the real server
 	serverConn, err := tls.Dial("tcp", host, cConfig)
 	if err != nil {
@@ -1462,12 +1471,12 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 					// tls.Dial returns a *tls.Conn directly
 					capturedChain = retryConn.ConnectionState().PeerCertificates
 					retryConn.Close()
-					log.Printf("[%s] Failed to connect to upstream host: %v%s", connID, err, extractCertificateChainInfo(err, capturedChain))
+					log.Printf("[%s] Failed to connect to upstream host %s: %v%s", name, connID, err, extractCertificateChainInfo(err, capturedChain))
 				} else {
-					log.Printf("[%s] Failed to connect to upstream host: %v", connID, err)
+					log.Printf("[%s] Failed to connect to upstream host %s: %v", name, connID, err)
 				}
 			} else {
-				log.Printf("[%s] Failed to connect to upstream host: %v", connID, err)
+				log.Printf("[%s] Failed to connect to upstream host %s: %v", name, connID, err)
 			}
 			tlsConn.Close()
 			return
@@ -1513,6 +1522,86 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 		tlsConn.Close()
 		serverConn.Close()
 	}
+}
+
+func (p *Proxy) serveCertPlain(w http.ResponseWriter, r *http.Request) {
+	file := "getcertpage.html"
+	mimetype := "text/html"
+	code := 200
+
+	if r.URL.Path == "/cert.pem" {
+		file = certFile
+		mimetype = "application/octet-stream"
+	}
+
+	data, err := os.ReadFile(file)
+	if err != nil {
+		log.Printf("[%s] Error reading cert file: %v", r.RemoteAddr, err)
+		// Send error response to client
+		code = 500
+		mimetype = "text/plain"
+		data = []byte("Internal Server Error")
+	}
+
+	w.Header().Add("Content-Type", mimetype)
+	w.WriteHeader(code)
+	_, err = w.Write(data)
+	if err != nil {
+		log.Printf("[%s] Error writing response to client: %v", r.RemoteAddr, err)
+		return
+	}
+}
+
+func (p *Proxy) serveCert(tlsConn *tls.Conn, host, name string, clientHello *clientHelloInfo, connID string) {
+	// Read HTTP requests from client and forward to server
+	reader := bufio.NewReader(tlsConn)
+
+	// Read the request
+	req, err := http.ReadRequest(reader)
+	if err != nil {
+		if err != io.EOF {
+			log.Printf("[%s] Error reading request: %v", connID, err)
+		}
+		return
+	}
+
+	if *logURLs {
+		fullURL := fmt.Sprintf("https://%s%s", req.Host, req.URL.Path)
+		if req.URL.RawQuery != "" {
+			fullURL += "?" + req.URL.RawQuery
+		}
+		log.Printf("[%s] MITM URL: %s %s", connID, req.Method, fullURL)
+	}
+
+	file := "getcertpage.html"
+	mimetype := "text/html"
+
+	// Write response back to client
+	if req.URL.Path == "/cert.pem" {
+		file = certFile
+		mimetype = "application/octet-stream"
+	}
+	data, err := os.ReadFile(file)
+	strdata := string(data)
+	if err != nil {
+		log.Printf("[%s] Error reading cert file: %v", connID, err)
+		// Send error response to client
+		tlsConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n" +
+			"Content-Type: text/plain\r\n" +
+			"Content-Length: 21\r\n\r\n" +
+			"Internal Server Error"))
+		tlsConn.Close()
+		return
+	}
+	_, err = tlsConn.Write([]byte("HTTP/1.1 200 OK\r\n" +
+		"Content-Type: " + mimetype + "\r\n" +
+		fmt.Sprintf("Content-Length: %d\r\n\r\n", len(strdata)) +
+		strdata))
+	if err != nil {
+		log.Printf("[%s] Error writing response to client: %v", connID, err)
+		return
+	}
+	tlsConn.Close()
 }
 
 // extractCertificateChainInfo analyzes the certificate chain to identify the missing root
