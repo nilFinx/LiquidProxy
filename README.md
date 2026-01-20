@@ -48,3 +48,13 @@ Set the port to 6532 for IMAP, 6533 for SMTP.
 Disable SSL when asked. YES, YOUR MAIL GOES THROUGH UNENCRYPTED. THIS IS A HUGE SECURITY RISK IF YOU DON'T TRUST THE CONNECTION FROM YOU TO THE SERVER.
 
 PUBLIC OR WEP WIFI, ROUTER,  CAN SEE EVERYTHING.
+
+## About no-mitm.txt
+
+Top part is required for certain functions to work. Bottom is something that doesn't exist anymore, so the log spam is less annoying.
+
+## AI disclosure
+
+AI was barely used in making of this software. It was used for some parts, but the work was mostly from reading the docs.
+
+There are some AI? traces on the code - and .claude on .gitignore. They likely come from the original project, not me. (likely AquaProxy, not mitm)
