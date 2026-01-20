@@ -34,8 +34,8 @@ import (
 var (
 	hostname, _ = os.Hostname()
 
-	keyFile  = "AquaProxy-key.pem"
-	certFile = "AquaProxy-cert.pem"
+	keyFile  = "LiquidProxy-key.pem"
+	certFile = "LiquidProxy-cert.pem"
 
 	// Generated certs are only used between the OS and the proxy. Prioritize speed.
 	RSAKeyLength = 1024
@@ -290,9 +290,6 @@ func peekClientHello(conn net.Conn) (*clientHelloInfo, error) {
 func startKeyPool() {
 	// Start key generation in background
 	go func() {
-
-		// Set lower CPU priority for this goroutine
-		syscall.Setpriority(syscall.PRIO_PROCESS, 0, 19)
 
 		for {
 			// First check if the pool needs more keys
@@ -679,7 +676,7 @@ func main() {
 		Wrap:            transparentProxy,
 	}
 
-	log.Printf("Aqua HTTP Proxy started on port 6531")
+	log.Printf("Liquid HTTP Proxy started on port 6531")
 	if *logURLs {
 		log.Println("URL logging is ENABLED")
 	}
