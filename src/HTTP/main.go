@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -52,10 +53,12 @@ var (
 	keyPool = make(chan *rsa.PrivateKey, 20)
 
 	// Command line flags for HTTP proxy
+	httpPort               = flag.Int("http-port", 6531, "HTTP proxy port")
 	logURLs                = flag.Bool("log-urls", false, "Print every URL accessed in MITM mode")
 	forceMITM              = flag.Bool("force-mitm", false, "Force MITM mode for all connections")
 	cpuProfile             = flag.Bool("cpu-profile", false, "Enable CPU profiling to legacy_proxy_cpu.prof")
-	allowRemoteConnections = flag.Bool("allow-remote-connections", false, "Allow connections from non-localhost addresses")
+	removePrefix           = flag.Bool("remove-prefix", false, "Remove \"HTTP\" prefix in output")
+	allowRemoteConnections = !*flag.Bool("block-remote-connections", false, "Block connections from non-localhost addresses")
 
 	// Command line flags from IMAP proxy (for compatibility with shared flags.txt)
 	_ = flag.Int("imap-port", 6532, "IMAP proxy port (ignored by HTTP proxy)")
@@ -579,6 +582,10 @@ func loadSystemCertPool() (*x509.CertPool, error) {
 }
 
 func main() {
+	if !*removePrefix {
+		log.SetPrefix("HTTP ")
+	}
+
 	// Read flags from flags.txt if it exists
 	if data, err := ioutil.ReadFile("flags.txt"); err == nil {
 		flags := strings.Fields(string(data))
@@ -676,17 +683,17 @@ func main() {
 		Wrap:            transparentProxy,
 	}
 
-	log.Printf("Liquid HTTP Proxy started on port 6531")
+	log.Printf("Liquid HTTP Proxy started on port %d", *httpPort)
 	if *logURLs {
 		log.Println("URL logging is ENABLED")
 	}
 	if *forceMITM {
 		log.Println("Force MITM mode is ENABLED")
 	}
-	if *allowRemoteConnections {
+	if allowRemoteConnections {
 		log.Println("Remote connections are ALLOWED")
 	}
-	log.Fatal(http.ListenAndServe(":6531", p))
+	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(*httpPort), p))
 }
 
 // getIntermediateCerts retrieves cached certificates for the provided pool
@@ -923,7 +930,7 @@ type Proxy struct {
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-	if !*allowRemoteConnections {
+	if !allowRemoteConnections {
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
 			http.Error(w, "Invalid remote address", http.StatusBadRequest)
