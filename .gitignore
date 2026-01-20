@@ -1,5 +1,7 @@
 *.pem
 
+flags.txt
+
 build
 libMacportsLegacySupport.dylib
 libWowfunhappyLegacySupport.dylib
