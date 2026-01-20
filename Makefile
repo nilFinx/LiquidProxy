@@ -1,3 +1,8 @@
+EXE :=
+ifeq ($(OS),Windows_NT)
+	EXE := .exe
+endif
+
 all: build
 
 run:
@@ -6,13 +11,13 @@ run:
 run-job: http imap
 
 http:
-	build/Liquid-HTTP-Proxy
+	build/HTTP$(EXE)
 imap:
-	build/Liquid-IMAP-Proxy
+	build/IMAP$(EXE)
 
 build: http-build imap-build
 
 http-build:
-	go build -o build/ src/Liquid-HTTP-Proxy.go
+	go build -o build/HTTP$(EXE) src/HTTP/main.go
 imap-build:
-	go build -o build/ src/Liquid-IMAP-Proxy.go
+	go build -o build/IMAP$(EXE) src/IMAP/main.go
