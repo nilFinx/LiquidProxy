@@ -25,9 +25,11 @@ var (
 	debug                  = flag.Bool("debug", false, "Enable debug logging")
 	disableIMAP            = flag.Bool("no-imap", false, "Disable IMAP proxy")
 	disableSMTP            = flag.Bool("no-smtp", false, "Disable SMTP proxy")
-	allowRemoteConnections = flag.Bool("allow-remote-connections", false, "Allow connections from non-localhost addresses")
+	removePrefix           = flag.Bool("remove-prefix", false, "Remove \"MAIL\" prefix in output")
+	allowRemoteConnections = !*flag.Bool("block-remote-connections", false, "Block connections from non-localhost addresses")
 
 	// Command line flags from HTTP proxy (for compatibility with shared flags.txt)
+	_ = flag.Int("http-port", 6532, "HTTP proxy port (ignored by IMAP proxy)")
 	_ = flag.Bool("log-urls", false, "Print every URL accessed (ignored by IMAP proxy)")
 	_ = flag.Bool("force-mitm", false, "Force MITM mode (ignored by IMAP proxy)")
 	_ = flag.Bool("cpu-profile", false, "Enable CPU profiling (ignored by IMAP proxy)")
@@ -143,6 +145,10 @@ func loadSystemCertPool() (*x509.CertPool, error) {
 }
 
 func main() {
+	if !*removePrefix {
+		log.SetPrefix("MAIL ")
+	}
+
 	// Read flags from flags.txt if it exists
 	if data, err := ioutil.ReadFile("flags.txt"); err == nil {
 		flags := strings.Fields(string(data))
@@ -207,7 +213,7 @@ func main() {
 	} else if !*disableSMTP {
 		log.Printf("Liquid Mail Proxy started (SMTP:%d)", *smtpPort)
 	}
-	if *allowRemoteConnections {
+	if allowRemoteConnections {
 		log.Println("Remote connections are ALLOWED")
 	}
 	// Keep the main thread running
@@ -241,7 +247,7 @@ func (mp *MailProxy) Start() error {
 // handleConnection handles a single client connection
 func (mp *MailProxy) handleConnection(clientConn net.Conn) {
 	// Check if connection is from localhost unless allow-remote-connections is set
-	if !*allowRemoteConnections {
+	if !allowRemoteConnections {
 		host, _, err := net.SplitHostPort(clientConn.RemoteAddr().String())
 		if err != nil {
 			if mp.Debug {
