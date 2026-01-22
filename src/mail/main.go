@@ -840,11 +840,13 @@ func (mc *MailConnection) connectToServer(tlsConfig *tls.Config, port int) error
 
 	// For SMTP on port 465, use direct TLS
 	if mc.protocol == "SMTP" && port == 465 {
-		tlsConf := &tls.Config{
-			ServerName: mc.targetServer,
-		}
-		if tlsConfig != nil {
-			*tlsConf = *tlsConfig
+		var tlsConf *tls.Config
+		if tlsConfig == nil {
+			tlsConf = &tls.Config{
+				ServerName: mc.targetServer,
+			}
+		} else {
+			tlsConf = tlsConfig
 			tlsConf.ServerName = mc.targetServer
 		}
 
@@ -866,11 +868,13 @@ func (mc *MailConnection) connectToServer(tlsConfig *tls.Config, port int) error
 
 		// For IMAP, always upgrade to TLS immediately
 		if mc.protocol == "IMAP" {
-			tlsConf := &tls.Config{
-				ServerName: mc.targetServer,
-			}
-			if tlsConfig != nil {
-				*tlsConf = *tlsConfig
+			var tlsConf *tls.Config
+			if tlsConfig == nil {
+				tlsConf = &tls.Config{
+					ServerName: mc.targetServer,
+				}
+			} else {
+				tlsConf = tlsConfig
 				tlsConf.ServerName = mc.targetServer
 			}
 
@@ -950,14 +954,15 @@ func (mc *MailConnection) authenticateSMTP(authType, username, password string, 
 		}
 
 		// Upgrade connection
-		tlsConf := &tls.Config{
-			ServerName: mc.targetServer,
-		}
+		var tlsConf *tls.Config
 		// CRITICAL: Copy the TLS config to get RootCAs for Snow Leopard
 		if tlsConfig != nil {
-			*tlsConf = *tlsConfig
+			tlsConf = tlsConfig
 			tlsConf.ServerName = mc.targetServer
 		} else {
+			tlsConf = &tls.Config{
+				ServerName: mc.targetServer,
+			}
 			if mc.debug {
 				log.Printf("[%s] WARNING: No TLS config provided for STARTTLS!", mc.id)
 			}
