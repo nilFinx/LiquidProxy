@@ -2,9 +2,8 @@
 
 flags.txt
 
-/aquaproxy.exe*
-/aquaproxy~
-/aquaproxy
+/liquidproxy*
+/builds/
 
 libMacportsLegacySupport.dylib
 libWowfunhappyLegacySupport.dylib

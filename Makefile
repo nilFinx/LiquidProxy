@@ -10,8 +10,19 @@ dev:
 	$(MAKE) run
 
 run:
-	aquaproxy$(EXE) $(ARGS) $(HTTP-ARGS)
+	liquidproxy$(EXE) $(ARGS) $(HTTP-ARGS)
+
+clean:
+	rm -f liquidproxy*
+	rm -fr builds/
 
 build:
-	cd src && \
-		go build -o ../
+	go build
+
+build-%:
+	OS=$(word 1,$(subst -, ,$*)) ; \
+	ARCH=$(word 2,$(subst -, ,$*)) ; \
+	EXT=$$( [ "$$OS" = "windows" ] && echo ".exe" ) ; \
+	GOOS=$$OS GOARCH=$$ARCH go build -o builds/liquidproxy-$*$$EXT
+
+cross: build-darwin-amd64 build-darwin-arm64 build-linux-amd64 build-linux-arm64 build-windows-amd64
