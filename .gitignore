@@ -2,7 +2,11 @@
 
 flags.txt
 
-build
+http
+http.exe
+mail
+mail.exe
+
 libMacportsLegacySupport.dylib
 libWowfunhappyLegacySupport.dylib
 

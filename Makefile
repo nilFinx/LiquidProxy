@@ -23,13 +23,13 @@ mail-dev:
 	$(MAKE) mail-run
 
 http-run:
-	build/http$(EXE) $(ARGS) $(HTTP-ARGS)
+	http$(EXE) $(ARGS) $(HTTP-ARGS)
 mail-run:
-	build/mail$(EXE) $(ARGS) $(MAIL-ARGS)
+	mail$(EXE) $(ARGS) $(MAIL-ARGS)
 
 build: http mail
 
 http:
-	go build -o build/http$(EXE) src/http/main.go
+	go build -o http$(EXE) src/http/main.go
 mail:
-	go build -o build/mail$(EXE) src/mail/main.go
+	go build -o mail$(EXE) src/mail/main.go
