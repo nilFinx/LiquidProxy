@@ -25,7 +25,7 @@ jobs:
       run: make cross
 
     - name: Copy artifacts and scripts to the builds folder
-      run: cp create-cert.* builds/
+      run: cp create-cert.* no-mitm.txt redirects.txt builds/
   
     - name: Release
       uses: softprops/action-gh-release@v2
