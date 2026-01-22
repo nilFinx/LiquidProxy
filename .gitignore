@@ -2,9 +2,9 @@
 
 flags.txt
 
-http
+/http
 http.exe
-mail
+/mail
 mail.exe
 
 libMacportsLegacySupport.dylib
