@@ -3,7 +3,6 @@ package liquidproxy
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -12,7 +11,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	"strconv"
 	"time"
 )
@@ -76,130 +74,6 @@ func httpMain(systemRoots *x509.CertPool, ca tls.Certificate) {
 	}
 
 	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(*httpPort), p))
-}
-
-func transparentProxy(upstream http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reqID := fmt.Sprintf("%p", r)
-
-		if *logURLs {
-			log.Printf("[%s] HTTP URL: %s %s", reqID, r.Method, r.URL.String())
-		}
-
-		rw := &responseTracker{
-			ResponseWriter: w,
-			reqID:          reqID,
-			url:            r.URL.String(),
-		}
-
-		upstream.ServeHTTP(rw, r)
-	})
-}
-
-// Proxy is a forward proxy that substitutes its own certificate
-// for incoming TLS connections in place of the upstream server's
-// certificate.
-type Proxy struct {
-	// Wrap specifies a function for optionally wrapping upstream for
-	// inspecting the decrypted HTTP request and response.
-	Wrap func(upstream http.Handler) http.Handler
-
-	// CA specifies the root CA for generating leaf certs for each incoming
-	// TLS request.
-	CA *tls.Certificate
-
-	// TLSServerConfig specifies the tls.Config to use when generating leaf
-	// cert using CA.
-	TLSServerConfig *tls.Config
-
-	// TLSClientConfig specifies the tls.Config to use when establishing
-	// an upstream connection for proxying.
-	TLSClientConfig *tls.Config
-
-	// FlushInterval specifies the flush interval
-	// to flush to the client while copying the
-	// response body.
-	// If zero, no periodic flushing is done.
-	FlushInterval time.Duration
-}
-
-func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
-	if r.URL.Host == lpHost1 || r.URL.Host == lpHost2 {
-		serveWebUIPlain(w, r)
-		return
-	}
-
-	if *blockRemoteConnections {
-		host, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			http.Error(w, "Invalid remote address", http.StatusBadRequest)
-			return
-		}
-
-		ip := net.ParseIP(host)
-		if ip == nil || !ip.IsLoopback() {
-			http.Error(w, "Remote connections not allowed", http.StatusForbidden)
-			return
-		}
-	}
-
-	if r.Method == "CONNECT" {
-		p.serveConnect(w, r)
-		return
-	}
-
-	// Create a custom director that handles redirects transparently
-	director := func(req *http.Request) {
-		httpDirector(req)
-
-		// Check for redirects and modify the request to go to the redirect target
-		if targetURL, shouldRedirect := checkRedirect(req.URL); shouldRedirect {
-			log.Printf("Redirecting %s → %s", req.URL.String(), targetURL.String())
-			req.URL = targetURL
-			req.Host = targetURL.Host
-		}
-	}
-
-	// Create a custom transport that handles connection errors
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			// First try to connect to the requested address
-			conn, err := net.Dial(network, addr)
-			if err != nil {
-				// If connection fails, check if this is a redirect domain
-				host, _, _ := net.SplitHostPort(addr)
-				redirectMutex.RLock()
-				rules, hasRedirects := redirectRules[host]
-				redirectMutex.RUnlock()
-
-				if hasRedirects && len(rules) > 0 {
-					// Try the first redirect target
-					targetHost := rules[0].toURL.Host
-					targetPort := rules[0].toURL.Port()
-					if targetPort == "" {
-						if rules[0].toURL.Scheme == "https" {
-							targetPort = "443"
-						} else {
-							targetPort = "80"
-						}
-					}
-					targetAddr := net.JoinHostPort(targetHost, targetPort)
-
-					return net.Dial(network, targetAddr)
-				}
-			}
-			return conn, err
-		},
-		TLSClientConfig: p.TLSClientConfig,
-	}
-
-	rp := &httputil.ReverseProxy{
-		Director:      director,
-		Transport:     transport,
-		FlushInterval: p.FlushInterval,
-	}
-	p.Wrap(rp).ServeHTTP(w, r)
 }
 
 func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
@@ -280,54 +154,6 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 		// Legacy client OR domain has redirects OR force MITM enabled - use MITM mode
 		p.serveMITM(clientConn, host, name, clientHello, connID)
 	}
-}
-
-func (p *Proxy) cert(names ...string) (*tls.Certificate, error) {
-	// Create a cache key from the domain names
-	cacheKey := names[0]
-
-	// Check if we have a cached certificate for this domain
-	leafCertMutex.RLock()
-	cachedCert, found := leafCertCache[cacheKey]
-	leafCertMutex.RUnlock()
-
-	if found {
-		// Check if the certificate is still valid (has not expired)
-		if time.Now().Before(cachedCert.Leaf.NotAfter) {
-			// Create a defensive copy of the certificate to prevent shared state issues
-			certCopy := new(tls.Certificate)
-			*certCopy = *cachedCert
-			return certCopy, nil
-		}
-		// Certificate expired, remove from cache
-		leafCertMutex.Lock()
-		delete(leafCertCache, cacheKey)
-		leafCertMutex.Unlock()
-	}
-
-	// Generate a new certificate
-	cert, err := genCert(p.CA, names)
-	if err != nil {
-		log.Printf("Error generating certificate for %s: %v", cacheKey, err)
-		return nil, err
-	}
-
-	// Cache the new certificate
-	leafCertMutex.Lock()
-	leafCertCache[cacheKey] = cert
-	leafCertMutex.Unlock()
-
-	// Return a copy to prevent shared state issues
-	certCopy := new(tls.Certificate)
-	*certCopy = *cert
-	return certCopy, nil
-}
-
-var okHeader = []byte("HTTP/1.1 200 OK\r\n\r\n")
-
-func httpDirector(r *http.Request) {
-	r.URL.Host = r.Host
-	r.URL.Scheme = "http"
 }
 
 // passthroughConnection handles a connection in passthrough mode without TLS interception

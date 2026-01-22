@@ -2,6 +2,7 @@ package liquidproxy
 
 import (
 	"bufio"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -9,7 +10,10 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
+
+var okHeader = []byte("HTTP/1.1 200 OK\r\n\r\n")
 
 // checkRedirect checks if the request URL matches any redirect rules and returns the target URL
 func checkRedirect(reqURL *url.URL) (*url.URL, bool) {
@@ -211,4 +215,50 @@ func (rw *responseTracker) Write(b []byte) (int, error) {
 		rw.WriteHeader(http.StatusOK)
 	}
 	return rw.ResponseWriter.Write(b)
+}
+
+func (p *Proxy) cert(names ...string) (*tls.Certificate, error) {
+	// Create a cache key from the domain names
+	cacheKey := names[0]
+
+	// Check if we have a cached certificate for this domain
+	leafCertMutex.RLock()
+	cachedCert, found := leafCertCache[cacheKey]
+	leafCertMutex.RUnlock()
+
+	if found {
+		// Check if the certificate is still valid (has not expired)
+		if time.Now().Before(cachedCert.Leaf.NotAfter) {
+			// Create a defensive copy of the certificate to prevent shared state issues
+			certCopy := new(tls.Certificate)
+			*certCopy = *cachedCert
+			return certCopy, nil
+		}
+		// Certificate expired, remove from cache
+		leafCertMutex.Lock()
+		delete(leafCertCache, cacheKey)
+		leafCertMutex.Unlock()
+	}
+
+	// Generate a new certificate
+	cert, err := genCert(p.CA, names)
+	if err != nil {
+		log.Printf("Error generating certificate for %s: %v", cacheKey, err)
+		return nil, err
+	}
+
+	// Cache the new certificate
+	leafCertMutex.Lock()
+	leafCertCache[cacheKey] = cert
+	leafCertMutex.Unlock()
+
+	// Return a copy to prevent shared state issues
+	certCopy := new(tls.Certificate)
+	*certCopy = *cert
+	return certCopy, nil
+}
+
+func httpDirector(r *http.Request) {
+	r.URL.Host = r.Host
+	r.URL.Scheme = "http"
 }
