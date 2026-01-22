@@ -20,13 +20,17 @@ getcertpage.html uses CSS from [cydia.saurik.com](https://cydia.saurik.com/), an
 
 Do NOT use any third party instanced of LiquidProxy, unless you trust them. Due to nature of TLS MitM proxies, the server owner is able to see everything that goes through the proxy. HTTPS WEBSITES WILL STILL BE INTERCEPTED! THERE IS NO WAY TO DEFEND AGAINST THIS RISK, OTHER THAN TO HOST YOUR OWN PROXY.
 
-## How to use (on server)
+## How to use (on server/PC)
 
-Grab the binaries [from GitHub](https://github.com/nilFinx/LiquidProxy/releases), or follow `Compiling`.
+Grab the file for your OS and create-cert.sh/bat [from GitHub](https://github.com/nilFinx/LiquidProxy/releases), or follow `Compiling`.
 
-Run either create-cert.bat or create-cert.sh to get certificates. Windows is .bat, anthing else is most likely .sh. Make sure that OpenSSL is installed in path (if you can run `openssl` from terminal/command prompt, you do). Alternatively, place LiquidProxy-cert.pem and LiquidProxy-key.pem.
+Note: Windows is .bat, while anything else is most likely .sh.
 
-After that, just run the LiquidProxy(.exe) file.
+Run either create-cert. This will create a certificate next to where it was run. Make sure that OpenSSL is installed in path (if you can run `openssl` from terminal/command prompt, you do). Alternatively, place LiquidProxy-cert.pem, LiquidProxy-cert.cer and LiquidProxy-key.pem.
+
+Note: LiquidProxy-cert.cer is cert.pem in DER format. This is not required but recommended.
+
+After that, just open liquidproxy(.exe).
 
 ### Configuration
 
