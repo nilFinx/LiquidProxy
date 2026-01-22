@@ -247,6 +247,10 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if clientHello.isModernClient && *blockModernConnections {
+		return
+	}
+
 	// Check if domain has redirect rules or is excluded from MITM
 	// Extract domain without port
 	domain := host
