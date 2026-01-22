@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 	"flag"
 	"log"
 	"os"
@@ -65,6 +66,12 @@ var (
 	excludedMutex   sync.RWMutex
 )
 
+func FileCheck(file string) {
+	if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
+		log.Fatalf("%s does not exist. Make sure that %s, %s and %s exists.", file, keyFile, certFile, certFileCer)
+	}
+}
+
 func Run() {
 	// Read flags from flags.txt if it exists
 	if data, err := os.ReadFile("flags.txt"); err == nil {
@@ -72,6 +79,10 @@ func Run() {
 		os.Args = append([]string{os.Args[0]}, append(flags, os.Args[1:]...)...)
 	}
 	flag.Parse()
+
+	FileCheck(keyFile)
+	FileCheck(certFile)
+	FileCheck(certFileCer)
 
 	// Setup CPU profiling if requested
 	if *cpuProfile {
