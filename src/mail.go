@@ -4,35 +4,60 @@ import (
 	"bufio"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
-	"encoding/pem"
-	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net"
-	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 )
 
-var (
-	// Command line flags for IMAP proxy
-	imapPort               = flag.Int("imap-port", 6532, "IMAP proxy port")
-	smtpPort               = flag.Int("smtp-port", 6533, "SMTP proxy port")
-	debug                  = flag.Bool("debug", false, "Enable debug logging")
-	disableIMAP            = flag.Bool("no-imap", false, "Disable IMAP proxy")
-	disableSMTP            = flag.Bool("no-smtp", false, "Disable SMTP proxy")
-	removePrefix           = flag.Bool("remove-prefix", false, "Remove \"MAIL\" prefix in output")
-	blockRemoteConnections = flag.Bool("block-remote-connections", false, "Block connections from non-localhost addresses")
+func mailMain(systemRoots *x509.CertPool) {
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		RootCAs:    systemRoots,
+	}
 
-	// Command line flags from HTTP proxy (for compatibility with shared flags.txt)
-	_ = flag.Int("http-port", 6532, "HTTP proxy port (ignored by IMAP proxy)")
-	_ = flag.Bool("log-urls", false, "Print every URL accessed (ignored by IMAP proxy)")
-	_ = flag.Bool("force-mitm", false, "Force MITM mode (ignored by IMAP proxy)")
-	_ = flag.Bool("cpu-profile", false, "Enable CPU profiling (ignored by IMAP proxy)")
-)
+	// Start IMAP proxy
+	if !*disableIMAP {
+		imapProxy := &MailProxy{
+			Protocol:          "IMAP",
+			Port:              *imapPort,
+			DefaultRemotePort: 993,
+			TLSConfig:         tlsConfig,
+			Debug:             *debug,
+		}
+		if err := imapProxy.Start(); err != nil {
+			log.Fatal("Failed to start IMAP proxy:", err)
+		}
+	}
+
+	// Start SMTP proxy
+	if !*disableSMTP {
+		smtpProxy := &MailProxy{
+			Protocol:          "SMTP",
+			Port:              *smtpPort,
+			DefaultRemotePort: 587,
+			TLSConfig:         tlsConfig,
+			Debug:             *debug,
+		}
+		if err := smtpProxy.Start(); err != nil {
+			log.Fatal("Failed to start SMTP proxy:", err)
+		}
+	}
+
+	// Print single startup message
+	if !*disableIMAP && !*disableSMTP {
+		log.Printf("Liquid Mail Proxy started (IMAP:%d, SMTP:%d)", *imapPort, *smtpPort)
+	} else if !*disableIMAP {
+		log.Printf("Liquid Mail Proxy started (IMAP:%d)", *imapPort)
+	} else if !*disableSMTP {
+		log.Printf("Liquid Mail Proxy started (SMTP:%d)", *smtpPort)
+	}
+	if !*blockRemoteConnections {
+		log.Println("Remote connections are ALLOWED")
+	}
+}
 
 // MailProxy handles IMAP and SMTP proxy connections
 type MailProxy struct {
@@ -67,155 +92,6 @@ type MailConnection struct {
 	serverReader  *bufio.Reader
 	serverWriter  *bufio.Writer
 	debug         bool
-}
-
-func isSnowLeopard() bool {
-	cmd := exec.Command("sw_vers", "-productVersion")
-	output, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	version := strings.TrimSpace(string(output))
-	// Snow Leopard is 10.6.x
-	return strings.HasPrefix(version, "10.6.")
-}
-
-func loadSystemCertPool() (*x509.CertPool, error) {
-	// Try the standard method first (unless we're on Snow Leopard)
-	if !isSnowLeopard() {
-		systemRoots, err := x509.SystemCertPool()
-		if err == nil && systemRoots != nil {
-			return systemRoots, nil
-		}
-	}
-
-	// Fallback: Use security command to export certificates. Needed on Snow Leopard.
-	log.Println("Using security to load system certificates.")
-
-	pool := x509.NewCertPool()
-	keychains := []string{
-		"", // empty string for default keychain search list
-		"/System/Library/Keychains/SystemRootCertificates.keychain",
-		"/Library/Keychains/System.keychain",
-	}
-
-	// Load from all keychains
-	for _, keychain := range keychains {
-		args := []string{"find-certificate", "-a", "-p"}
-		if keychain != "" {
-			args = append(args, keychain)
-		}
-
-		cmd := exec.Command("security", args...)
-		output, err := cmd.Output()
-		if err != nil {
-			if keychain != "" {
-				log.Printf("Warning: Failed to load certificates from %s: %v", keychain, err)
-			}
-			continue
-		}
-
-		// Parse the PEM output
-		for len(output) > 0 {
-			block, rest := pem.Decode(output)
-			if block == nil {
-				break
-			}
-			output = rest
-
-			if block.Type != "CERTIFICATE" {
-				continue
-			}
-
-			cert, err := x509.ParseCertificate(block.Bytes)
-			if err != nil {
-				continue
-			}
-
-			pool.AddCert(cert)
-		}
-	}
-
-	if len(pool.Subjects()) == 0 {
-		log.Fatal("Failed to load any certificates from system keychains")
-	}
-
-	return pool, nil
-}
-
-func main() {
-	// Read flags from flags.txt if it exists
-	if data, err := os.ReadFile("flags.txt"); err == nil {
-		flags := strings.Fields(string(data))
-		os.Args = append([]string{os.Args[0]}, append(flags, os.Args[1:]...)...)
-	}
-	flag.Parse()
-
-	if !*removePrefix {
-		log.SetPrefix("MAIL ")
-	}
-
-	// Create TLS config for upstream connections
-	systemRoots, err := loadSystemCertPool()
-	if err != nil {
-		log.Println("Warning: Could not load system certificate pool:", err)
-		systemRoots = x509.NewCertPool()
-	} else {
-		if *debug {
-			log.Printf("Loaded system certificate pool with %d certificates", len(systemRoots.Subjects()))
-		}
-	}
-
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS10,
-		RootCAs:    systemRoots,
-	}
-
-	// Start IMAP proxy
-	if !*disableIMAP {
-		imapProxy := &MailProxy{
-			Protocol:          "IMAP",
-			Port:              *imapPort,
-			DefaultRemotePort: 993,
-			TLSConfig:         tlsConfig,
-			Debug:             *debug,
-		}
-		if err := imapProxy.Start(); err != nil {
-			log.Fatal("Failed to start IMAP proxy:", err)
-		}
-	}
-
-	// Start SMTP proxy
-	if !*disableSMTP {
-		smtpProxy := &MailProxy{
-			Protocol:          "SMTP",
-			Port:              *smtpPort,
-			DefaultRemotePort: 587,
-			TLSConfig:         tlsConfig,
-			Debug:             *debug,
-		}
-		if err := smtpProxy.Start(); err != nil {
-			log.Fatal("Failed to start SMTP proxy:", err)
-		}
-	}
-
-	if *disableIMAP && *disableSMTP {
-		log.Fatal("Both IMAP and SMTP are disabled, nothing to do")
-	}
-
-	// Print single startup message
-	if !*disableIMAP && !*disableSMTP {
-		log.Printf("Liquid Mail Proxy started (IMAP:%d, SMTP:%d)", *imapPort, *smtpPort)
-	} else if !*disableIMAP {
-		log.Printf("Liquid Mail Proxy started (IMAP:%d)", *imapPort)
-	} else if !*disableSMTP {
-		log.Printf("Liquid Mail Proxy started (SMTP:%d)", *smtpPort)
-	}
-	if !*blockRemoteConnections {
-		log.Println("Remote connections are ALLOWED")
-	}
-	// Keep the main thread running
-	select {}
 }
 
 // Start starts the mail proxy listener
@@ -1314,17 +1190,4 @@ func (mc *MailConnection) Close() {
 	if mc.serverConn != nil {
 		mc.serverConn.Close()
 	}
-}
-
-// Helper functions for base64 encoding/decoding
-func encodeBase64(s string) string {
-	return base64.StdEncoding.EncodeToString([]byte(s))
-}
-
-func decodeBase64(s string) (string, error) {
-	decoded, err := base64.StdEncoding.DecodeString(s)
-	if err != nil {
-		return "", err
-	}
-	return string(decoded), nil
 }
