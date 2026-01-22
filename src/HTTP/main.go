@@ -37,6 +37,9 @@ var (
 	keyFile  = "LiquidProxy-key.pem"
 	certFile = "LiquidProxy-cert.pem"
 
+	lpHost1 = "liquidproxy.r.e.a.l"
+	lpHost2 = "lp.r.e.a.l"
+
 	// Generated certs are only used between the OS and the proxy. Prioritize speed.
 	RSAKeyLength = 1024
 
@@ -927,7 +930,7 @@ type Proxy struct {
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-	if r.URL.Host == "liquidproxy.r.e.a.l" {
+	if r.URL.Host == lpHost1 || r.URL.Host == lpHost2 {
 		p.serveCertPlain(w, r)
 		return
 	}
@@ -1237,9 +1240,11 @@ func (p *Proxy) handleMITMWithLogging(tlsConn *tls.Conn, serverConn *tls.Conn, h
 				// If the target is on a different host, we need to proxy to it
 				if targetURL.Host != host {
 					// Create a new TLS connection to the target host
-					targetConfig := new(tls.Config)
-					if p.TLSClientConfig != nil {
-						*targetConfig = *p.TLSClientConfig
+					var targetConfig *tls.Config
+					if p.TLSClientConfig == nil {
+						targetConfig = new(tls.Config)
+					} else {
+						targetConfig = p.TLSClientConfig
 					}
 					targetConfig.ServerName = targetURL.Host
 
@@ -1367,10 +1372,12 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 		return
 	}
 
+	var sConfig *tls.Config
 	// Create TLS server config
-	sConfig := new(tls.Config)
-	if p.TLSServerConfig != nil {
-		*sConfig = *p.TLSServerConfig
+	if p.TLSServerConfig == nil {
+		sConfig = new(tls.Config)
+	} else {
+		sConfig = p.TLSServerConfig
 	}
 	sConfig.Certificates = []tls.Certificate{*cert}
 	sConfig.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
@@ -1406,13 +1413,15 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 	}
 
 	// Set up client TLS config for upstream connection
-	cConfig := new(tls.Config)
-	if p.TLSClientConfig != nil {
-		*cConfig = *p.TLSClientConfig
+	var cConfig *tls.Config
+	if p.TLSClientConfig == nil {
+		cConfig = new(tls.Config)
+	} else {
+		cConfig = p.TLSClientConfig
 	}
 	cConfig.ServerName = name
 
-	if name == "liquidproxy.r.e.a.l" {
+	if name == lpHost1 || name == lpHost2 {
 		p.serveCert(tlsConn, host, name, clientHello, connID)
 		return
 	}
@@ -1441,8 +1450,7 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 				}
 
 				// Update TLS config for new host
-				redirectConfig := new(tls.Config)
-				*redirectConfig = *cConfig
+				redirectConfig := cConfig
 				redirectConfig.ServerName = rules[0].toURL.Host
 
 				// Try connecting to redirect target
@@ -1462,8 +1470,7 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 			if errors.As(err, &unknownAuthorityErr) {
 				// Retry with InsecureSkipVerify to capture the chain
 				var capturedChain []*x509.Certificate
-				retryConfig := new(tls.Config)
-				*retryConfig = *cConfig
+				retryConfig := cConfig
 				retryConfig.InsecureSkipVerify = true
 
 				// Quick connection just to get the chain
