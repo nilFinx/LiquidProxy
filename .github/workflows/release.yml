@@ -1,0 +1,37 @@
+name: Release draft
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/setup-go@v6.2.0
+      with:
+        go-version: "1.19.13"
+    
+    - uses: actions/checkout@v4
+
+    - name: Compile for all platforms
+      run: make cross
+
+    - name: Copy artifacts and scripts to the builds folder
+      run: cp create-cert.* builds/
+  
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      with:
+        repository: nilFinx/LiquidProxy
+        draft: true
+        token: ${{ secrets.CUSTOM_GITHUB_TOKEN }}
+        files: |
+          builds/*
