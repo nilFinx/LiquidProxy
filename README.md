@@ -45,7 +45,7 @@ flags.txt works like a text file full of arguments:
 
 ### Compiling
 
-Run `make`, and you'll see aquaproxy (.exe) in the project directory. Just run it!
+Run `make`, and you'll see liquidproxy(.exe) in the project directory. Just run it!
 
 If you can't have GNU Make for some reason (there is a port of it for Windows), just run `go build -o ../` in `src` directory.
 
