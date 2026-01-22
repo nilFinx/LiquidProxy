@@ -14,9 +14,9 @@ Do NOT use any third party instanced of LiquidProxy, unless you trust them. Due 
 
 Run either create-cert.bat or create-cert.sh to get certificates. Windows is .bat, anthing else is most likely .sh. Make sure that OpenSSL is installed in path (if you can run `openssl` from terminal/command prompt, you do). Alternatively, place LiquidProxy-cert.pem and LiquidProxy-key.pem.
 
-Run `make`, and you'll see HTTP and IMAP in build directory. Just run it.
+Run `make`, and you'll see aquaproxy (.exe) in the project directory. Just run it!
 
-If you can't have GNU Make for some reason (there is a port of it for Windows), just run `go build -o http.exe src/http/main.go` (replace .exe with nothing on Mac/Linux!!!), and replace http on the command with mail and do it again.
+If you can't have GNU Make for some reason (there is a port of it for Windows), just run `go build -o ../` in `src` directory.
 
 Configuration can be done through run arguments, or flags.txt.
 
