@@ -54,9 +54,6 @@ func mailMain(systemRoots *x509.CertPool) {
 	} else if !*disableSMTP {
 		log.Printf("Mail Proxy started (SMTP:%d)", *smtpPort)
 	}
-	if !*blockRemoteConnections {
-		log.Println("Remote connections are ALLOWED")
-	}
 }
 
 // MailProxy handles IMAP and SMTP proxy connections
