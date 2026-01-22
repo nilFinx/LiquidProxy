@@ -1,10 +1,20 @@
 # LiquidProxy
 
-Based on code from [WowFunHappy's Aqua Proxy](https://github.com/wowfunhappy/aquaproxy) which is based on [kr's mitm](https://github.com/kr/mitm).
+Note: This repository is available in [tangled](https://tangled.org/nilfinx.tngl.sh/LiquidProxy) and [GitHub](https://github.com/nilFinx/LiquidProxy). tangled is unstable/bleeding edge, while GitHub is stable.
+
+LiquidProxy is a fork of [WowFunHappy's Aqua Proxy](https://github.com/wowfunhappy/aquaproxy). which is based on [kr's mitm](https://github.com/kr/mitm)
 
 getcertpage.html uses CSS from [cydia.saurik.com](https://cydia.saurik.com/), and few parts of it is taken from Victor Lobe's personal website. ([gh/victorlobe/victorlobe.me](https://github.com/victorlobe/victorlobe.me))
 
-This is pretty much just a rebrand of AquaProxy with some convenience.
+## Extra features
+
+* Static web UI to quickly obtain the certificate
+* Ability to block modern clients (if detected, don't rely on it)
+* Ability to block ancient clients (TLSv1.1 or lower)
+* Better documentation and generally less headache of manually hosting it outside of legacy OSX
+* Mail and HTTP proxy combined into one project
+* Source code is split into multiple files, making maintenance easier
+* Makefile for building
 
 ## RISK WARNING
 
@@ -12,11 +22,13 @@ Do NOT use any third party instanced of LiquidProxy, unless you trust them. Due 
 
 ## How to use (on server)
 
+Grab the binaries [from GitHub](https://github.com/nilFinx/LiquidProxy/releases), or follow `Compiling`.
+
 Run either create-cert.bat or create-cert.sh to get certificates. Windows is .bat, anthing else is most likely .sh. Make sure that OpenSSL is installed in path (if you can run `openssl` from terminal/command prompt, you do). Alternatively, place LiquidProxy-cert.pem and LiquidProxy-key.pem.
 
-Run `make`, and you'll see aquaproxy (.exe) in the project directory. Just run it!
+After that, just run the LiquidProxy(.exe) file.
 
-If you can't have GNU Make for some reason (there is a port of it for Windows), just run `go build -o ../` in `src` directory.
+### Configuration
 
 Configuration can be done through run arguments, or flags.txt.
 
@@ -26,6 +38,12 @@ flags.txt works like a text file full of arguments:
 --debug -remove-prefix
 --http-port=2141
 ```
+
+### Compiling
+
+Run `make`, and you'll see aquaproxy (.exe) in the project directory. Just run it!
+
+If you can't have GNU Make for some reason (there is a port of it for Windows), just run `go build -o ../` in `src` directory.
 
 ## How to use (on iDevice)
 
