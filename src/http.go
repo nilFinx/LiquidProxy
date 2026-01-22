@@ -67,7 +67,7 @@ func httpMain(systemRoots *x509.CertPool, ca tls.Certificate) {
 		Wrap:            transparentProxy,
 	}
 
-	log.Printf("Liquid HTTP Proxy started on port %d", *httpPort)
+	log.Printf("HTTP Proxy started (%d)", *httpPort)
 	if *logURLs {
 		log.Println("URL logging is ENABLED")
 	}

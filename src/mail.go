@@ -48,11 +48,11 @@ func mailMain(systemRoots *x509.CertPool) {
 
 	// Print single startup message
 	if !*disableIMAP && !*disableSMTP {
-		log.Printf("Liquid Mail Proxy started (IMAP:%d, SMTP:%d)", *imapPort, *smtpPort)
+		log.Printf("Mail Proxy started (IMAP:%d, SMTP:%d)", *imapPort, *smtpPort)
 	} else if !*disableIMAP {
-		log.Printf("Liquid Mail Proxy started (IMAP:%d)", *imapPort)
+		log.Printf("Mail Proxy started (IMAP:%d)", *imapPort)
 	} else if !*disableSMTP {
-		log.Printf("Liquid Mail Proxy started (SMTP:%d)", *smtpPort)
+		log.Printf("Mail Proxy started (SMTP:%d)", *smtpPort)
 	}
 	if !*blockRemoteConnections {
 		log.Println("Remote connections are ALLOWED")
