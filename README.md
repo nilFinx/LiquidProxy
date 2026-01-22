@@ -35,7 +35,7 @@ flags.txt works like a text file full of arguments:
 
 * Go to settings > Wi-Fi > (the symbol > next to WiFi network), and set proxy to manual.
 * * The host/IP should be the IP/domain to your server running the proxy. Port is 6531.
-* Go to [liquidproxy.r.e.a.l](https://liquidproxy.r.e.a.l/), tap "Get LiquidProxy certificate"
+* Go to [lp.r.e.a.l](https://lp.r.e.a.l/) or [liquidproxy.r.e.a.l](https://liquidproxy.r.e.a.l/), tap "Get LiquidProxy certificate"
 * Tap Install, and skip any potential warning
 * * Enter passcode when prompted. This does NOT get sent to me/us, or the proxy server admin.
 
