@@ -18,8 +18,9 @@ import (
 var (
 	hostname, _ = os.Hostname()
 
-	keyFile  = "LiquidProxy-key.pem"
-	certFile = "LiquidProxy-cert.pem"
+	keyFile     = "LiquidProxy-key.pem"
+	certFile    = "LiquidProxy-cert.pem"
+	certFileCer = "LiquidProxy-cert.cer"
 
 	lpHost1 = "liquidproxy.r.e.a.l"
 	lpHost2 = "lp.r.e.a.l"
@@ -41,6 +42,7 @@ var (
 	// Command line flags for HTTP proxy
 	forceMITM              = flag.Bool("force-mitm", false, "Force MITM mode for all connections")
 	blockRemoteConnections = flag.Bool("block-remote-connections", false, "Block connections from non-localhost addresses")
+	blockModernConnections = flag.Bool("block-modern-connections", false, "Block connections from modern devices (with TLSv1.3 and HTTP/2)")
 	allowSSL               = flag.Bool("allow-ssl", false, "Allow SSL 3.0 - TLSv1.1 (insecure)")
 	cpuProfile             = flag.Bool("cpu-profile", false, "Enable CPU profiling to legacy_proxy_cpu.prof")
 	removePrefix           = flag.Bool("remove-prefix", false, "Remove component prefix in output")
