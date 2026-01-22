@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	_ "embed"
 	"fmt"
 	"io"
 	"log"
@@ -12,14 +13,23 @@ import (
 	"strconv"
 )
 
+//go:embed getcertpage.html
+var getCertPageFile []byte
+
 func webuiProcess(r *http.Request) (code int, mimetype string, data []byte) {
 	file := "getcertpage.html"
 	mimetype = "text/html"
 	code = 200
 
-	if r.URL.Path == "/cert.pem" || r.URL.Path == "/cert.cer" {
+	switch r.URL.Path {
+	case "/cert.pem":
 		file = certFile
 		mimetype = "application/octet-stream"
+	case "/cert.cer":
+		file = certFileCer
+		mimetype = "application/octet-stream"
+	default:
+		return code, mimetype, getCertPageFile
 	}
 
 	data, err := os.ReadFile(file)
