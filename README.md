@@ -22,7 +22,7 @@ Do NOT use any third party instanced of LiquidProxy, unless you trust them. Due 
 
 ## How to use (on server/PC)
 
-Grab the file for your OS and create-cert.sh/bat [from GitHub](https://github.com/nilFinx/LiquidProxy/releases), or follow `Compiling`.
+Grab the file for your OS, no-mitm.txt, redirects.txt and create-cert.sh/bat [from GitHub](https://github.com/nilFinx/LiquidProxy/releases), or follow `Compiling`. Put them all in one folder.
 
 Note: Windows is .bat, while anything else is most likely .sh.
 
