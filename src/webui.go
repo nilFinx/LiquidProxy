@@ -1,4 +1,4 @@
-package main
+package liquidproxy
 
 import (
 	"bufio"
@@ -17,7 +17,7 @@ func webuiProcess(r *http.Request) (code int, mimetype string, data []byte) {
 	mimetype = "text/html"
 	code = 200
 
-	if r.URL.Path == "/cert.pem" {
+	if r.URL.Path == "/cert.pem" || r.URL.Path == "/cert.cer" {
 		file = certFile
 		mimetype = "application/octet-stream"
 	}

@@ -1,4 +1,4 @@
-package main
+package liquidproxy
 
 import (
 	"crypto/rsa"
@@ -63,7 +63,7 @@ var (
 	excludedMutex   sync.RWMutex
 )
 
-func main() {
+func Run() {
 	// Read flags from flags.txt if it exists
 	if data, err := os.ReadFile("flags.txt"); err == nil {
 		flags := strings.Fields(string(data))
