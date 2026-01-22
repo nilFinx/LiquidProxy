@@ -2,10 +2,9 @@
 
 flags.txt
 
-/http
-http.exe
-/mail
-mail.exe
+/aquaproxy.exe*
+/aquaproxy~
+/aquaproxy
 
 libMacportsLegacySupport.dylib
 libWowfunhappyLegacySupport.dylib
