@@ -82,7 +82,6 @@ func Run() {
 
 	FileCheck(keyFile)
 	FileCheck(certFile)
-	FileCheck(certFileCer)
 
 	// Setup CPU profiling if requested
 	if *cpuProfile {
