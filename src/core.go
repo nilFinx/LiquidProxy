@@ -17,6 +17,8 @@ import (
 )
 
 var (
+	version = "1.0.0"
+
 	hostname, _ = os.Hostname()
 
 	keyFile     = "LiquidProxy-key.pem"
@@ -41,12 +43,12 @@ var (
 	keyPool = make(chan *rsa.PrivateKey, 20)
 
 	// Command line flags for HTTP proxy
+	showVersion            = flag.Bool("version", false, "Show version and quit")
 	forceMITM              = flag.Bool("force-mitm", false, "Force MITM mode for all connections")
 	blockRemoteConnections = flag.Bool("block-remote-connections", false, "Block connections from non-localhost addresses")
 	blockModernConnections = flag.Bool("block-modern-connections", false, "Block connections from modern devices (with TLSv1.3 and HTTP/2)")
 	allowSSL               = flag.Bool("allow-ssl", false, "Allow SSL 3.0 - TLSv1.1 (insecure)")
 	cpuProfile             = flag.Bool("cpu-profile", false, "Enable CPU profiling to legacy_proxy_cpu.prof")
-	removePrefix           = flag.Bool("remove-prefix", false, "Remove component prefix in output")
 	logURLs                = flag.Bool("log-urls", false, "Print every URL accessed in MITM mode")
 	debug                  = flag.Bool("debug", false, "Enable debug logging (mail only)")
 	httpPort               = flag.Int("http-port", 6531, "HTTP proxy port")
@@ -79,6 +81,11 @@ func Run() {
 		os.Args = append([]string{os.Args[0]}, append(flags, os.Args[1:]...)...)
 	}
 	flag.Parse()
+
+	if *showVersion {
+		print("Version " + version)
+		os.Exit(0)
+	}
 
 	FileCheck(keyFile)
 	FileCheck(certFile)
