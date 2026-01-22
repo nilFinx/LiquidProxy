@@ -167,7 +167,7 @@ func loadExclusionRules() error {
 				excludedMutex.Lock()
 				excludedDomains[u.Host] = true
 				excludedMutex.Unlock()
-				log.Printf("Excluding domain from MITM: %s", u.Host)
+				//log.Printf("Excluding domain from MITM: %s", u.Host)
 			}
 		} else {
 			// It's just a domain
@@ -180,7 +180,7 @@ func loadExclusionRules() error {
 			excludedMutex.Lock()
 			excludedDomains[domain] = true
 			excludedMutex.Unlock()
-			log.Printf("Excluding domain from MITM: %s", domain)
+			//log.Printf("Excluding domain from MITM: %s", domain)
 		}
 	}
 
