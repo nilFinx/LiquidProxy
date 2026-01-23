@@ -46,7 +46,7 @@ type MailConnection struct {
 	debug         bool
 }
 
-func mailMain(systemRoots *x509.CertPool) {
+func mailMain(systemRoots *x509.CertPool, tlsServerConfig *tls.Config) {
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 		RootCAs:    systemRoots,
@@ -174,8 +174,12 @@ func (mc *MailConnection) parseUsername(username string) error {
 	if strings.HasSuffix(un, "@") {
 		mc.realUsername = strings.TrimRight(un, "@")
 	} else {
-		// john@example.com. correct answer is john@@example.com
-		return fmt.Errorf("Get off of my server :(")
+		if !strings.HasPrefix(un, "lp:") {
+			// john@example.com. correct answer is john@@example.com
+			return fmt.Errorf("Get off of my server :(")
+		} else {
+			mc.realUsername = strings.TrimLeft(un, "lp:")
+		}
 	}
 	mc.targetServer = username[lastAt+1:]
 
