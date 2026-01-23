@@ -22,6 +22,7 @@ getcertpage.html uses CSS from [cydia.saurik.com](https://cydia.saurik.com/), an
 
 ## What this should be used for
 
+* A normal HTTP proxy, as clients with TLSv1.3 and HTTP/2 will have the data just sent without MitM (assuming that the force-mitm flag is off)
 * Get mails on ancient devices that your mail provider rejects
 * Use some HTTP services with same or compatible API (such as CalDAV on strict servers like Disroot)
 
