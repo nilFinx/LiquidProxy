@@ -102,11 +102,11 @@ If you can't have GNU Make for some reason (there is a port of it for Windows), 
 
 **WARNING:** All mails are plaintext as of now. This will be fixed in future, but for now, stick with iCloud, or providers that allows older TLS version + ciphers.
 
-Set username to `username@domain.com@insert.mail.server.com`
+Set username to `username@domain.com@insert.mail.server.com` (do NOT use double @ here)
 
-If the username is just username, use `username@insert.mail.server.com`.
+If the username is just username, use `username@@insert.mail.server.com`. (double @ = I am not a bot for name@server)
 
-For iCloud mail (IMAP only), it looks like `johndoe@imap.mail.me.com`
+For iCloud mail (IMAP only), it looks like `johndoe@@imap.mail.me.com`
 
 In advanced, disable SSL and set the port to 6532 for IMAP, 6533 for SMTP.
 
