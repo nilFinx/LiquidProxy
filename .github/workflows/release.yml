@@ -24,8 +24,8 @@ jobs:
     - name: Compile for all platforms
       run: make cross
 
-    - name: Copy artifacts and scripts to the builds folder
-      run: cp create-cert.* no-mitm.txt redirects.txt builds/
+    - name: Bundle misc files in a zip and put to builds
+      run: ./bundler.sh
   
     - name: Release
       uses: softprops/action-gh-release@v2
