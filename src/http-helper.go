@@ -238,6 +238,69 @@ func loadExclusionRules() error {
 	return nil
 }
 
+// loadBipasRules loads URLs to never ask for auth from bipas.txt
+func loadBipasRules() error {
+	bipasFile := "bipas.txt"
+
+	// Check if file exists
+	if _, err := os.Stat(bipasFile); os.IsNotExist(err) {
+		log.Println("Warning: no bipas.txt file found")
+		return nil
+	}
+
+	file, err := os.Open(bipasFile)
+	if err != nil {
+		return fmt.Errorf("failed to open exclusion file: %w", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	lineNum := 0
+
+	for scanner.Scan() {
+		lineNum++
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Parse URL or domain
+		if strings.Contains(line, "://") {
+			// It's a full URL, extract the domain
+			u, err := url.Parse(line)
+			if err != nil {
+				log.Printf("Warning: Invalid URL on line %d: %s", lineNum, line)
+				continue
+			}
+
+			if u.Host != "" {
+				aExcludedMutex.Lock()
+				aExcludedDomains[u.Host] = true
+				aExcludedMutex.Unlock()
+			}
+		} else {
+			// It's just a domain
+			domain := line
+			// Remove port if present
+			if h, _, err := net.SplitHostPort(domain); err == nil {
+				domain = h
+			}
+
+			aExcludedMutex.Lock()
+			aExcludedDomains[domain] = true
+			aExcludedMutex.Unlock()
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error reading bipas file: %w", err)
+	}
+
+	return nil
+}
+
 func (rw *responseTracker) WriteHeader(statusCode int) {
 	rw.wroteHeader = true
 	rw.status = statusCode

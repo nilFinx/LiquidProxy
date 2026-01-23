@@ -28,6 +28,9 @@ func webuiProcess(r *http.Request) (code int, mimetype string, data []byte) {
 	case "/cert.cer":
 		file = certFileCer
 		mimetype = "application/octet-stream"
+	case "/client.mobileconfig":
+		file = clientConfigFile
+		mimetype = "application/octet-stream"
 	default:
 		return code, mimetype, getCertPageFile
 	}

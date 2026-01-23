@@ -5,15 +5,41 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 )
+
+var clientCALeaf *x509.Certificate
+
+var (
+	allowedIPs   = make(map[string]bool)
+	allowedMutex sync.RWMutex
+)
+
+func allowIP(ipmash string) {
+	ip := unmashIP(ipmash)
+	allowedMutex.RLock()
+	allowedIPs[ip] = true
+	allowedMutex.RUnlock()
+	log.Printf("Allowing %s", ip)
+}
+
+func isIPAllowed(ipmash string) (result bool) {
+	allowedMutex.RLock()
+	result = allowedIPs[unmashIP(ipmash)]
+	allowedMutex.RUnlock()
+	return result
+}
 
 func httpMain(systemRoots *x509.CertPool, ca tls.Certificate) {
 	// Load redirect rules
@@ -25,6 +51,37 @@ func httpMain(systemRoots *x509.CertPool, ca tls.Certificate) {
 	if err := loadExclusionRules(); err != nil {
 		log.Printf("Error loading exclusion rules: %v", err)
 	}
+
+	// Load auth exclusion rules
+	if err := loadBipasRules(); err != nil {
+		log.Printf("Error loading bipas rules: %v", err)
+	}
+
+	if *enforceCert {
+		data, err := os.ReadFile(clientCAFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		for {
+			var block *pem.Block
+			block, data = pem.Decode(data)
+			if block == nil {
+				break
+			}
+
+			if block.Type == "CERTIFICATE" {
+				cert, err := x509.ParseCertificate(block.Bytes)
+				if err != nil {
+					log.Fatal(err)
+				}
+				clientCALeaf = cert
+				break
+			}
+		}
+	}
+
+	pool := x509.NewCertPool()
+	pool.AddCert(clientCALeaf)
 
 	// Configure server side with relaxed security for old OS X clients
 	tlsServerConfig := &tls.Config{
@@ -40,6 +97,8 @@ func httpMain(systemRoots *x509.CertPool, ca tls.Certificate) {
 			tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
 			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
 		},
+		ClientAuth: tls.RequestClientCert,
+		ClientCAs:  pool,
 	}
 	if *allowSSL {
 		tlsServerConfig.MinVersion = tls.VersionSSL30
@@ -112,25 +171,43 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if *proxyPassword != "" {
-		pauth := r.Header.Get("Proxy-Authorization")
-		if pauth == "" {
-			if _, err = clientConn.Write(authplsHeader); err != nil {
-				log.Printf("[%s] Failed to send 407: %v", connID, err)
-			}
-			clientConn.Close()
-			return
-		} else {
-			ppassenc := encodeBase64(fmt.Sprintf("lp:%s", *proxyPassword))
-			if pauth != "Basic "+ppassenc {
-				log.Printf("[%s] Got invalid password", r.RemoteAddr)
-				addFailedIP(r.RemoteAddr)
-				if _, err = clientConn.Write(authplsHeader); err != nil {
-					log.Printf("[%s] Failed to send 401: %v", connID, err)
+	notAuthenticated := true
+	if !*enforceCert && *proxyPassword != "" {
+		aExcludedMutex.RLock()
+		isExcluded := aExcludedDomains[r.Host]
+		aExcludedMutex.RUnlock()
+		if !(isExcluded || isIPAllowed(r.RemoteAddr) || strings.HasSuffix(r.Host, "apple.com")) {
+			pauth := r.Header.Get("Proxy-Authorization")
+			if pauth == "" {
+				if _, err := clientConn.Write(authplsHeader); err != nil {
+					log.Printf("[%s] Failed to send 407: %v", connID, err)
 				}
 				clientConn.Close()
 				return
+			} else {
+				ppassenc := encodeBase64(fmt.Sprintf("lp:%s", *proxyPassword))
+				if pauth != "Basic "+ppassenc {
+					log.Printf("[%s] Got invalid password on %s", r.RemoteAddr, r.Host)
+					addFailedIP(r.RemoteAddr)
+					if _, err := clientConn.Write(authplsHeader); err != nil {
+						log.Printf("[%s] Failed to send 401: %v", connID, err)
+					}
+					clientConn.Close()
+				}
+				log.Printf("[%s] Got correct password (serveConnect)", connID)
+				allowIP(r.RemoteAddr)
+				notAuthenticated = false
 			}
+		} else {
+			if !isIPAllowed(r.RemoteAddr) {
+				log.Printf("[%s] Pass, host %s (serveConnect)", connID, r.Host)
+				allowIP(r.RemoteAddr)
+			}
+			notAuthenticated = false
+		}
+	} else {
+		if !*enforceCert {
+			notAuthenticated = false
 		}
 	}
 
@@ -145,7 +222,9 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 	clientHello, err := peekClientHello(clientConn)
 	if err != nil {
 		// Fall back to MITM mode if we can't parse the ClientHello
-		p.serveMITM(clientConn, host, name, nil, connID)
+		if !notAuthenticated {
+			p.serveMITM(clientConn, host, name, nil, connID, false)
+		}
 		return
 	}
 
@@ -171,25 +250,27 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 	// Route based on client capabilities, redirect rules, and exclusion rules
 	if isExcluded {
 		// Domain is explicitly excluded from MITM - always use passthrough
-		if *logURLs {
+		if *logURLs && *debug {
 			log.Printf("[%s] Domain %s is excluded from MITM, using passthrough", connID, domain)
 		}
-		p.passthroughConnection(clientConn, host, clientHello, connID)
+		p.passthroughConnection(clientConn, host, clientHello, connID, notAuthenticated)
 	} else if clientHello.isModernClient && !hasRedirects && !*forceMITM {
 		// Modern client detected, no redirects, and force MITM not enabled - use passthrough mode
-		p.passthroughConnection(clientConn, host, clientHello, connID)
+		p.passthroughConnection(clientConn, host, clientHello, connID, notAuthenticated)
 	} else {
 		// Legacy client OR domain has redirects OR force MITM enabled - use MITM mode
-		p.serveMITM(clientConn, host, name, clientHello, connID)
+		p.serveMITM(clientConn, host, name, clientHello, connID, notAuthenticated)
 	}
 }
 
 // passthroughConnection handles a connection in passthrough mode without TLS interception
-func (p *Proxy) passthroughConnection(clientConn net.Conn, host string, clientHello *clientHelloInfo, connID string) {
+func (p *Proxy) passthroughConnection(clientConn net.Conn, host string, clientHello *clientHelloInfo, connID string, notAuthenticated bool) {
 	// Connect to the real server
 	serverConn, err := net.Dial("tcp", host)
 	if err != nil {
-		log.Printf("[%s] Failed to connect to upstream host %s: %v", connID, host, err)
+		if *debug {
+			log.Printf("[%s] Failed to connect to upstream host %s: %v", connID, host, err)
+		}
 		clientConn.Close()
 		return
 	}
@@ -369,7 +450,7 @@ func (p *Proxy) handleMITMWithLogging(tlsConn *tls.Conn, serverConn *tls.Conn, h
 }
 
 // serveMITM handles a connection in MITM mode with TLS interception
-func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *clientHelloInfo, connID string) {
+func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *clientHelloInfo, connID string, notAuthenticated bool) {
 	// Get certificate from cache or generate new one
 	cert, err := p.cert(name)
 	if err != nil {
@@ -418,6 +499,44 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 		return
 	}
 
+	if name == lpHost1 || name == lpHost2 {
+		serveWebUITLS(tlsConn, host, name, clientHello, connID)
+		return
+	}
+
+	if notAuthenticated {
+		a, _, _ := strings.Cut(host, ":")
+		aExcludedMutex.RLock()
+		isExcluded := aExcludedDomains[a]
+		aExcludedMutex.RUnlock()
+		if !isExcluded && !isIPAllowed(tlsConn.RemoteAddr().String()) {
+			connStat := tlsConn.ConnectionState()
+			if len(connStat.PeerCertificates) == 0 {
+				tlsConn.Write(authplsHeader)
+				tlsConn.Close()
+				clientConn.Close()
+				log.Printf("[%s] Server enforces cert but not given", tlsConn.RemoteAddr())
+				return
+			} else {
+				if !clientCALeaf.Equal(connStat.PeerCertificates[0]) {
+					tlsConn.Close()
+					clientConn.Close()
+					log.Printf("[%s] Bad cert", tlsConn.RemoteAddr())
+					return
+				}
+			}
+			log.Printf("[%s] Cert pass (serveMITM)", connID)
+			allowIP(tlsConn.RemoteAddr().String())
+			notAuthenticated = false
+		} else {
+			if isExcluded {
+				log.Printf("[%s] Host excluded pass (serveMITM)", connID)
+				allowIP(tlsConn.RemoteAddr().String())
+			}
+			notAuthenticated = false
+		}
+	}
+
 	// Set up client TLS config for upstream connection
 	var cConfig *tls.Config
 	if p.TLSClientConfig == nil {
@@ -426,11 +545,6 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 		cConfig = p.TLSClientConfig
 	}
 	cConfig.ServerName = name
-
-	if name == lpHost1 || name == lpHost2 {
-		serveWebUITLS(tlsConn, host, name, clientHello, connID)
-		return
-	}
 
 	// Connect to the real server
 	serverConn, err := tls.Dial("tcp", host, cConfig)
@@ -484,12 +598,18 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 					// tls.Dial returns a *tls.Conn directly
 					capturedChain = retryConn.ConnectionState().PeerCertificates
 					retryConn.Close()
-					log.Printf("[%s] Failed to connect to upstream host %s: %v%s", name, connID, err, extractCertificateChainInfo(err, capturedChain))
+					if *debug {
+						log.Printf("[%s] Failed to connect to upstream host %s: %v%s", name, connID, err, extractCertificateChainInfo(err, capturedChain))
+					}
 				} else {
-					log.Printf("[%s] Failed to connect to upstream host %s: %v", name, connID, err)
+					if *debug {
+						log.Printf("[%s] Failed to connect to upstream host %s: %v", name, connID, err)
+					}
 				}
 			} else {
-				log.Printf("[%s] Failed to connect to upstream host %s: %v", name, connID, err)
+				if *debug {
+					log.Printf("[%s] Failed to connect to upstream host %s: %v", name, connID, err)
+				}
 			}
 			tlsConn.Close()
 			return

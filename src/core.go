@@ -21,9 +21,11 @@ var (
 
 	hostname, _ = os.Hostname()
 
-	keyFile     = "LiquidProxy-key.pem"
-	certFile    = "LiquidProxy-cert.pem"
-	certFileCer = "LiquidProxy-cert.cer"
+	keyFile          = "LiquidProxy-key.pem"
+	certFile         = "LiquidProxy-cert.pem"
+	certFileCer      = "LiquidProxy-cert.cer"
+	clientCAFile     = "LiquidProxy-clientCert.pem"
+	clientConfigFile = "LiquidProxy.mobileconfig"
 
 	lpHost1 = "liquidproxy.r.e.a.l"
 	lpHost2 = "lp.r.e.a.l"
@@ -45,6 +47,7 @@ var (
 	// Command line flags for HTTP proxy
 	showVersion            = flag.Bool("version", false, "Show version and quit")
 	proxyPassword          = flag.String("proxy-password", "", "Proxy password in username:password format")
+	enforceCert            = flag.Bool("enforce-cert", false, "Enforce cert on HTTP proxy (can be combined with password)")
 	fail2banOn             = flag.Int("fail2ban-limit", 5, "Ban the IP when the count has been reached")
 	forceMITM              = flag.Bool("force-mitm", false, "Force MITM mode for all connections")
 	blockRemoteConnections = flag.Bool("block-remote-connections", false, "Block connections from non-localhost addresses")
@@ -52,7 +55,7 @@ var (
 	allowSSL               = flag.Bool("allow-ssl", false, "Allow SSL 3.0 - TLSv1.1 (insecure)")
 	cpuProfile             = flag.Bool("cpu-profile", false, "Enable CPU profiling to legacy_proxy_cpu.prof")
 	logURLs                = flag.Bool("log-urls", false, "Print every URL accessed in MITM mode")
-	debug                  = flag.Bool("debug", false, "Enable debug logging (mail only)")
+	debug                  = flag.Bool("debug", false, "Enable debug logging (mostly mail only)")
 	httpPort               = flag.Int("http-port", 6531, "HTTP proxy port")
 	imapPort               = flag.Int("imap-port", 6532, "IMAP proxy port")
 	smtpPort               = flag.Int("smtp-port", 6533, "SMTP proxy port")
@@ -68,11 +71,15 @@ var (
 	// MITM exclusion configuration
 	excludedDomains = make(map[string]bool)
 	excludedMutex   sync.RWMutex
+
+	// auth exclusion configuration
+	aExcludedDomains = make(map[string]bool)
+	aExcludedMutex   sync.RWMutex
 )
 
 func FileCheck(file string) {
 	if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
-		log.Fatalf("%s does not exist. Make sure that %s, %s and %s exists.", file, keyFile, certFile, certFileCer)
+		log.Fatalf("%s does not exist. Make sure that %s, %s, %s and %s exists.", file, keyFile, certFile, certFileCer, clientCAFile)
 	}
 }
 
@@ -84,19 +91,20 @@ func Run() {
 	}
 	flag.Parse()
 
-	log.Printf(*proxyPassword)
-
 	if *showVersion {
 		print("Version " + version)
 		os.Exit(0)
 	}
 
-	if *proxyPassword == "" {
-		log.Printf("Warning: Password auth not enforced")
+	if *proxyPassword == "" && !*enforceCert {
+		log.Printf("Warning: Password auth nor enforceCert is enforced")
+	} else if !*enforceCert {
+		log.Printf("Note: proxyPassword is HTTP-only. For all HTTPS connections, certificate will be used.")
 	}
 
 	FileCheck(keyFile)
 	FileCheck(certFile)
+	FileCheck(clientCAFile)
 
 	// Setup CPU profiling if requested
 	if *cpuProfile {

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+  <key>PayloadIdentifier</key>
+  <string>space.recycledplist.lpcert</string>
+  <key>PayloadUUID</key>
+  <string>540f0b2f-e84b-44ee-b8c8-82c6f1fe0310</string>
+  <key>PayloadDisplayName</key>
+  <string>LiquidProxy client cert</string>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key>
+      <string>com.apple.security.root</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>PayloadIdentifier</key>
+      <string>space.recycledplist.lpcert.ca</string>
+      <key>PayloadUUID</key>
+      <string>a6fb991b-ea41-469a-af86-a25e96fa408d</string>
+      <key>PayloadDisplayName</key>
+      <string>Proxy CA</string>
+      <key>PayloadContent</key>
+      <data>
+        @CA@
+      </data>
+    </dict>
+    <dict>
+      <key>PayloadType</key>
+      <string>com.apple.security.pkcs12</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>PayloadIdentifier</key>
+      <string>space.recycledplist.lpcert.client</string>
+      <key>PayloadUUID</key>
+      <string>1b2e399c-fa27-46d2-aec3-25a3f2c9952b</string>
+      <key>PayloadDisplayName</key>
+      <string>Proxy Client Cert</string>
+      <key>PayloadContent</key>
+      <data>
+        @P12@
+      </data>
+    </dict>
+  </array>
+</dict>
+</plist>

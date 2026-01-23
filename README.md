@@ -22,13 +22,11 @@ Do NOT use any third party instanced of LiquidProxy, unless you trust them. Due 
 
 ## How to use (on server/PC)
 
-Grab the file for your OS, no-mitm.txt, redirects.txt and create-cert.sh/bat [from GitHub](https://github.com/nilFinx/LiquidProxy/releases), or follow `Compiling`. Put them all in one folder.
+Grab the file for your OS and other-files.zip [from GitHub](https://github.com/nilFinx/LiquidProxy/releases), or follow `Compiling`. Put them all in one folder. (for zip, unzip the entire thing next to the exe.)
 
-Note: Windows is .bat, while anything else is most likely .sh.
+Run either create-cert.sh or create-cert.bat. Windows is .bat, anything else is .sh. This will create a certificate next to where it was run. The password is for encrypting the mobileconfig client certificate, and it's required.
 
-Run either create-cert. This will create a certificate next to where it was run. Make sure that OpenSSL is installed in path (if you can run `openssl` from terminal/command prompt, you do). Alternatively, place LiquidProxy-cert.pem, LiquidProxy-cert.cer and LiquidProxy-key.pem.
-
-Note: LiquidProxy-cert.cer is cert.pem in DER format. This is not required but recommended.
+*Make sure that OpenSSL is installed in path (if you can run `openssl` from terminal/command prompt, you do).*
 
 After that, just open liquidproxy(.exe).
 
@@ -42,6 +40,17 @@ flags.txt works like a text file full of arguments:
 --debug -remove-prefix
 --http-port=2141
 ```
+
+Enforcing password is as easy as using `--proxy-password=nilfinx:notpassword`
+
+Unfortunately, spaces are not supported at this time. Apple's CalDAV/CardDAV daemon politely sends the account password as proxy password, which causes an issue with authentication. Set proxy password to your account creds if you're using it.
+
+If you have more than two accounts, use below:
+
+bipas.txt includes a list of websites to never prompt proxy auth for. Do NOT put common websites like google.com here. Only use this for apps that screams "pls auth proxy" because it uses account password for proxy password, like Apple's CalDAV/CardDAV daemon.
+
+Note: If an IP passes auth once, it will be passed forever, even when appropriate fields are not supplied.
+WARNING: Auth ignored (bipas.txt) requests will also count as auth pass. Do NOT add common links in bipas.txt!!
 
 ### Compiling
 
@@ -57,7 +66,9 @@ If you can't have GNU Make for some reason (there is a port of it for Windows), 
 
 * Go to settings > Wi-Fi > (the symbol > next to WiFi network), and set proxy to manual.
 * * The host/IP should be the IP/domain to your server running the proxy. Port is 6531.
-* Go to [lp.r.e.a.l](https://lp.r.e.a.l/) or [liquidproxy.r.e.a.l](https://liquidproxy.r.e.a.l/), tap "Get LiquidProxy certificate"
+* Go to [lp.r.e.a.l](http://lp.r.e.a.l/) or [liquidproxy.r.e.a.l](http://liquidproxy.r.e.a.l/), tap "Get client certificate"
+* * The password is the one you entered earlier for encryption.
+* * If you get an error, bunch of text, or you're not on an Apple OS, use "Get certificate (.pem/.cer)"
 * Tap Install, and skip any potential warning
 * * Enter passcode when prompted. This does NOT get sent to me/us, or the proxy server admin.
 

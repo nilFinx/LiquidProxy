@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"strings"
 )
 
 func transparentProxy(upstream http.Handler) http.Handler {
@@ -15,7 +16,14 @@ func transparentProxy(upstream http.Handler) http.Handler {
 			w.WriteHeader(403)
 			w.Write([]byte("Banned"))
 		}
-		if *proxyPassword != "" {
+		if r.URL.Host == lpHost1 || r.URL.Host == lpHost2 {
+			serveWebUIPlain(w, r)
+			return
+		}
+		aExcludedMutex.RLock()
+		isExcluded := aExcludedDomains[r.Host]
+		aExcludedMutex.RUnlock()
+		if !isExcluded && !isIPAllowed(r.RemoteAddr) && *proxyPassword != "" && !strings.HasSuffix(r.Host, "apple.com") {
 			pauth := r.Header.Get("Proxy-Authorization")
 			if pauth == "" {
 				send407(w)
@@ -23,16 +31,14 @@ func transparentProxy(upstream http.Handler) http.Handler {
 			} else {
 				ppassenc := encodeBase64(fmt.Sprintf("lp:%s", *proxyPassword))
 				if pauth != ppassenc {
-					log.Printf("[%s] Got invalid password", r.RemoteAddr)
+					log.Printf("[%s] Got invalid password on %s", r.RemoteAddr, r.Host)
 					addFailedIP(r.RemoteAddr)
 					send407(w)
 					return
 				}
+				log.Printf("[%s] Got correct password (transparentProxy)", fmt.Sprintf("%p", r))
+				allowIP(r.RemoteAddr)
 			}
-		}
-		if r.URL.Host == lpHost1 || r.URL.Host == lpHost2 {
-			serveWebUIPlain(w, r)
-			return
 		}
 		reqID := fmt.Sprintf("%p", r)
 
