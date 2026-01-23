@@ -80,9 +80,6 @@ func httpMain(systemRoots *x509.CertPool, ca tls.Certificate) {
 		}
 	}
 
-	pool := x509.NewCertPool()
-	pool.AddCert(clientCALeaf)
-
 	// Configure server side with relaxed security for old OS X clients
 	tlsServerConfig := &tls.Config{
 		CipherSuites: []uint16{
@@ -98,7 +95,6 @@ func httpMain(systemRoots *x509.CertPool, ca tls.Certificate) {
 			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
 		},
 		ClientAuth: tls.RequestClientCert,
-		ClientCAs:  pool,
 	}
 	if *allowSSL {
 		tlsServerConfig.MinVersion = tls.VersionSSL30
