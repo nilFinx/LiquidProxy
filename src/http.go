@@ -133,7 +133,7 @@ func transparentProxy(upstream http.Handler) http.Handler {
 		aExcludedMutex.RLock()
 		isExcluded := aExcludedDomains[r.Host]
 		aExcludedMutex.RUnlock()
-		if !isExcluded && !isIPAllowed(r.RemoteAddr) && *proxyPassword != "" && !strings.HasSuffix(r.Host, "apple.com") {
+		if !(isExcluded || isIPAllowed(r.RemoteAddr) || (*proxyPassword == "" && !*enforceCert) || !strings.HasSuffix(r.Host, "apple.com")) {
 			pauth := r.Header.Get("Proxy-Authorization")
 			if pauth == "" {
 				send407(w)
@@ -306,10 +306,6 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 				notAuthenticated = false
 			}
 		} else {
-			if !isIPAllowed(r.RemoteAddr) {
-				log.Printf("[%s] Pass, host %s (serveConnect)", connID, r.Host)
-				allowIP(r.RemoteAddr)
-			}
 			notAuthenticated = false
 		}
 	} else {
@@ -616,7 +612,7 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 		aExcludedMutex.RLock()
 		isExcluded := aExcludedDomains[a]
 		aExcludedMutex.RUnlock()
-		if !isExcluded && !isIPAllowed(tlsConn.RemoteAddr().String()) {
+		if !(isExcluded || isIPAllowed(tlsConn.RemoteAddr().String())) {
 			connStat := tlsConn.ConnectionState()
 			if len(connStat.PeerCertificates) == 0 {
 				tlsConn.Write(authplsHeader)
@@ -636,10 +632,6 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 			allowIP(tlsConn.RemoteAddr().String())
 			notAuthenticated = false
 		} else {
-			if isExcluded {
-				log.Printf("[%s] Host excluded pass (serveMITM)", connID)
-				allowIP(tlsConn.RemoteAddr().String())
-			}
 			notAuthenticated = false
 		}
 	}
