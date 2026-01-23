@@ -82,6 +82,12 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 		host = r.Host
 	)
 
+	if isIPBanned(r.RemoteAddr) {
+		w.WriteHeader(403)
+		w.Write([]byte("Banned"))
+		return
+	}
+
 	// Generate a unique ID for this connection
 	connID := fmt.Sprintf("conn-%p", r)
 
@@ -104,6 +110,28 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[%s] Failed to hijack connection: %v", connID, err)
 		http.Error(w, "internal server error", 500)
 		return
+	}
+
+	if *proxyPassword != "" {
+		pauth := r.Header.Get("Proxy-Authorization")
+		if pauth == "" {
+			if _, err = clientConn.Write(authplsHeader); err != nil {
+				log.Printf("[%s] Failed to send 407: %v", connID, err)
+			}
+			clientConn.Close()
+			return
+		} else {
+			ppassenc := encodeBase64(fmt.Sprintf("lp:%s", *proxyPassword))
+			if pauth != "Basic "+ppassenc {
+				log.Printf("[%s] Got invalid password", r.RemoteAddr)
+				addFailedIP(r.RemoteAddr)
+				if _, err = clientConn.Write(authplsHeader); err != nil {
+					log.Printf("[%s] Failed to send 401: %v", connID, err)
+				}
+				clientConn.Close()
+				return
+			}
+		}
 	}
 
 	// Send 200 OK response

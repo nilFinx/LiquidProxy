@@ -14,6 +14,7 @@ import (
 )
 
 var okHeader = []byte("HTTP/1.1 200 OK\r\n\r\n")
+var authplsHeader = []byte("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"proxy\"\r\nContent-Length: 0\r\n\r\n")
 
 // responseTracker tracks response status and completion
 type responseTracker struct {
@@ -49,6 +50,12 @@ type Proxy struct {
 	// response body.
 	// If zero, no periodic flushing is done.
 	FlushInterval time.Duration
+}
+
+func send407(w http.ResponseWriter) {
+	w.Header().Add("Proxy-Authenticate", "Basic realm=\"proxy\"")
+	w.WriteHeader(407)
+	w.Write([]byte("Proxy requires auth"))
 }
 
 // checkRedirect checks if the request URL matches any redirect rules and returns the target URL

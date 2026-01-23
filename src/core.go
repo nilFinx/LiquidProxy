@@ -44,6 +44,8 @@ var (
 
 	// Command line flags for HTTP proxy
 	showVersion            = flag.Bool("version", false, "Show version and quit")
+	proxyPassword          = flag.String("proxy-password", "", "Proxy password in username:password format")
+	fail2banOn             = flag.Int("fail2ban-limit", 5, "Ban the IP when the count has been reached")
 	forceMITM              = flag.Bool("force-mitm", false, "Force MITM mode for all connections")
 	blockRemoteConnections = flag.Bool("block-remote-connections", false, "Block connections from non-localhost addresses")
 	blockModernConnections = flag.Bool("block-modern-connections", false, "Block connections from modern devices (with TLSv1.3 and HTTP/2)")
@@ -82,9 +84,15 @@ func Run() {
 	}
 	flag.Parse()
 
+	log.Printf(*proxyPassword)
+
 	if *showVersion {
 		print("Version " + version)
 		os.Exit(0)
+	}
+
+	if *proxyPassword == "" {
+		log.Printf("Warning: Password auth not enforced")
 	}
 
 	FileCheck(keyFile)

@@ -11,6 +11,29 @@ import (
 
 func transparentProxy(upstream http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isIPBanned(r.RemoteAddr) {
+			w.WriteHeader(403)
+			w.Write([]byte("Banned"))
+		}
+		if *proxyPassword != "" {
+			pauth := r.Header.Get("Proxy-Authorization")
+			if pauth == "" {
+				send407(w)
+				return
+			} else {
+				ppassenc := encodeBase64(fmt.Sprintf("lp:%s", *proxyPassword))
+				if pauth != ppassenc {
+					log.Printf("[%s] Got invalid password", r.RemoteAddr)
+					addFailedIP(r.RemoteAddr)
+					send407(w)
+					return
+				}
+			}
+		}
+		if r.URL.Host == lpHost1 || r.URL.Host == lpHost2 {
+			serveWebUIPlain(w, r)
+			return
+		}
 		reqID := fmt.Sprintf("%p", r)
 
 		if *logURLs {
@@ -28,12 +51,6 @@ func transparentProxy(upstream http.Handler) http.Handler {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
-	if r.URL.Host == lpHost1 || r.URL.Host == lpHost2 {
-		serveWebUIPlain(w, r)
-		return
-	}
-
 	if *blockRemoteConnections {
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
