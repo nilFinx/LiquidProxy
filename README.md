@@ -43,13 +43,14 @@ flags.txt works like a text file full of arguments:
 
 Enforcing password is as easy as using `--proxy-password=nilfinx:notpassword`
 
-Unfortunately, spaces are not supported at this time. Apple's CalDAV/CardDAV daemon politely sends the account password as proxy password, which causes an issue with authentication. Set proxy password to your account creds if you're using it.
+If you want certificate auth to be enabled, add `--enforce-cert`, although it is not known to do anything as of now.
 
-If you have more than two accounts, use below:
+Note: If an IP passes auth once, it will be passed forever, even when appropriate fields are not supplied.
+
+Unfortunately, spaces are not supported at this time. Fun fact: Apple's CalDAV/CardDAV daemon politely sends the account password as proxy password, which causes an issue with authentication.
 
 bipas.txt includes a list of websites to never prompt proxy auth for. Do NOT put common websites like google.com here. Only use this for apps that screams "pls auth proxy" because it uses account password for proxy password, like Apple's CalDAV/CardDAV daemon.
 
-Note: If an IP passes auth once, it will be passed forever, even when appropriate fields are not supplied.
 WARNING: Auth ignored (bipas.txt) requests will also count as auth pass. Do NOT add common links in bipas.txt!!
 
 ### Compiling
@@ -68,6 +69,7 @@ If you can't have GNU Make for some reason (there is a port of it for Windows), 
 * * The host/IP should be the IP/domain to your server running the proxy. Port is 6531.
 * Go to [lp.r.e.a.l](http://lp.r.e.a.l/) or [liquidproxy.r.e.a.l](http://liquidproxy.r.e.a.l/), tap "Get client certificate"
 * * The password is the one you entered earlier for encryption.
+* * On proxy hosted on Windows, use "Get certificate (.pem/.cer)" - not "Get client certificate"
 * * If you get an error, bunch of text, or you're not on an Apple OS, use "Get certificate (.pem/.cer)"
 * Tap Install, and skip any potential warning
 * * Enter passcode when prompted. This does NOT get sent to me/us, or the proxy server admin.
