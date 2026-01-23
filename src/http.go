@@ -94,7 +94,9 @@ func httpMain(systemRoots *x509.CertPool, ca tls.Certificate) {
 			tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
 			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
 		},
-		ClientAuth: tls.RequestClientCert,
+	}
+	if *enforceCert {
+		tlsServerConfig.ClientAuth = tls.RequestClientCert
 	}
 	if *allowSSL {
 		tlsServerConfig.MinVersion = tls.VersionSSL30
