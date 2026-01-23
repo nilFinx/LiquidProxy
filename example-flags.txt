@@ -1,0 +1,3 @@
+-debug -log-urls
+-enforce-cert
+--proxy-password=liquiduser:p@ssw0rd
