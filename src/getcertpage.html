@@ -32,7 +32,11 @@
 	<fieldset>
 		<div>
 			<div style="text-align: center;">
-				Note: For iOS 3 and other very old versions, use .cer. .pem should work in most cases.
+				iOS: bundle<br/>
+				Android: certificate (.cer) + client cert (.p12)<br/>
+				Others: Try it n see :p<br/>
+				<br/>
+				Note: On Windows server, you can only use .cer or .pem. No client certs here!
 			</div>
 		</div>
 	</fieldset>
@@ -40,7 +44,7 @@
 		<a href="/client.mobileconfig">
 			<div>
 				<div class="link-content">
-					Get client certificate
+					Get bundle (mobileconfig)
 				</div>
 			</div>
 		</a>
@@ -55,6 +59,13 @@
 			<div>
 				<div class="link-content">
 					Get certificate (.cer)
+				</div>
+			</div>
+		</a>
+		<a href="/client.p12">
+			<div>
+				<div class="link-content">
+					Get client cert (.p12)
 				</div>
 			</div>
 		</a>
