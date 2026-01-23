@@ -6,11 +6,31 @@ LiquidProxy is a fork of [WowFunHappy's Aqua Proxy](https://github.com/wowfunhap
 
 getcertpage.html uses CSS from [cydia.saurik.com](https://cydia.saurik.com/), and few parts of it is taken from Victor Lobe's personal website. ([gh/victorlobe/victorlobe.me](https://github.com/victorlobe/victorlobe.me))
 
+## What this is
+
+* A fix for "could not start a secure connection" and other TLS/SSL issues
+* Also a plaintext-to-TLS bridge for IMAP/SMTP
+
+## What this isn't
+
+* Complete fix for web browsing
+* Secure way to do anything at all (as you're still seeing the stuff in older ciphers/SSL version)
+* Re-encryption MitM bridge for IMAP/SMTP (to be added)
+* Fix for (insert app name) that has completely different API by now
+* Fix for (insert tweak name) fix
+* A way to browse (very few) laggy websites without lag
+
+## What this should be used for
+
+* Get mails on ancient devices that your mail provider rejects
+* Use some HTTP services with same or compatible API (such as CalDAV on strict servers like Disroot)
+
 ## Extra features
 
 * Static web UI to quickly obtain the certificate
 * Ability to block modern clients (if detected, don't rely on it)
 * Ability to block ancient clients (TLSv1.1 or lower)
+* Authentication (mess, but works)
 * Better documentation and generally less headache of manually hosting it outside of legacy OSX
 * Mail and HTTP proxy combined into one project
 * Source code is split into multiple files, making maintenance easier
@@ -67,10 +87,11 @@ If you can't have GNU Make for some reason (there is a port of it for Windows), 
 
 * Go to settings > Wi-Fi > (the symbol > next to WiFi network), and set proxy to manual.
 * * The host/IP should be the IP/domain to your server running the proxy. Port is 6531.
-* Go to [lp.r.e.a.l](http://lp.r.e.a.l/) or [liquidproxy.r.e.a.l](http://liquidproxy.r.e.a.l/), tap "Get client certificate"
-* * The password is the one you entered earlier for encryption.
-* * On proxy hosted on Windows, use "Get certificate (.pem/.cer)" - not "Get client certificate"
-* * If you get an error, bunch of text, or you're not on an Apple OS, use "Get certificate (.pem/.cer)"
+* Go to [lp.r.e.a.l](http://lp.r.e.a.l/) or [liquidproxy.r.e.a.l](http://liquidproxy.r.e.a.l/)
+* * On iOS, use bundle
+* * On Android, use certificate (.cer) + client cert (.p12)
+* * On other, try it and see :p
+* * WARN: On Windows, bundle and client cert does not work. Only other certificates does.
 * Tap Install, and skip any potential warning
 * * Enter passcode when prompted. This does NOT get sent to me/us, or the proxy server admin.
 
