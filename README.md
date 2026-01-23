@@ -108,6 +108,8 @@ If the username is just username, use `username@@insert.mail.server.com`. (doubl
 
 For iCloud mail (IMAP only), it looks like `johndoe@@imap.mail.me.com`
 
+**Note:** If your client rejects or "helps" with double @, use lp:johndoe@imap.mail.me.com instead. If it rejects double at even when separated... I don't know what to do. Open an issue and I'll figure out.
+
 In advanced, disable SSL and set the port to 6532 for IMAP, 6533 for SMTP.
 
 ## About no-mitm.txt
