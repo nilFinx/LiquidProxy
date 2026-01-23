@@ -1,3 +1,4 @@
 -debug -log-urls
--enforce-cert
---proxy-password=liquiduser:p@ssw0rd
+-allow-ssl -block-modern-connections
+-enforce-cert --proxy-password=liquiduser:p@ssw0rd
+-fail2ban-limit 3 -force-mitm
