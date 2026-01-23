@@ -301,6 +301,9 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 				if _, err := clientConn.Write(authplsHeader); err != nil {
 					log.Printf("[%s] Failed to send 407: %v", connID, err)
 				}
+				if *debug {
+					log.Printf("[%s] Requesting auth (serveConnect)", connID)
+				}
 				clientConn.Close()
 				return
 			} else {
@@ -613,7 +616,7 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 	// Perform TLS handshake
 	err = tlsConn.Handshake()
 	if err != nil {
-		//log.Printf("[%s] TLS handshake error: %v", connID, err)
+		log.Printf("[%s] TLS handshake error: %v", connID, err)
 		tlsConn.Close()
 		return
 	}
