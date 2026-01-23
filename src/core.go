@@ -25,6 +25,7 @@ var (
 	certFile         = "LiquidProxy-cert.pem"
 	certFileCer      = "LiquidProxy-cert.cer"
 	clientCAFile     = "LiquidProxy-clientCert.pem"
+	clientIdentFile  = "LiquidProxy-client.p12"
 	clientConfigFile = "LiquidProxy.mobileconfig"
 
 	lpHost1 = "liquidproxy.r.e.a.l"

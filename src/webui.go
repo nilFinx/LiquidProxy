@@ -24,13 +24,16 @@ func webuiProcess(r *http.Request) (code int, mimetype string, data []byte) {
 	switch r.URL.Path {
 	case "/cert.pem":
 		file = certFile
-		mimetype = "application/octet-stream"
+		mimetype = "application/x-x509-ca-cert"
 	case "/cert.cer":
 		file = certFileCer
-		mimetype = "application/octet-stream"
+		mimetype = "application/x-x509-ca-cert"
+	case "/client.p12":
+		file = clientIdentFile
+		mimetype = "application/x-pkcs12"
 	case "/client.mobileconfig":
 		file = clientConfigFile
-		mimetype = "application/octet-stream"
+		mimetype = "application/x-apple-aspen-config"
 	default:
 		return code, mimetype, getCertPageFile
 	}
