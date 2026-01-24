@@ -1,7 +1,8 @@
 *.cer
 *.pem
 
-flags.txt
+/flags.txt
+/generic-tcp.txt
 
 /liquidproxy*
 /builds/

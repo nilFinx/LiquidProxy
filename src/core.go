@@ -71,6 +71,10 @@ var (
 	redirectDomains = make(map[string]bool)
 	redirectMutex   sync.RWMutex
 
+	genericTCPRedirectRules = make(map[int][]GenericRedirectRule)
+	genericTCPRedirectPorts = make(map[int]bool)
+	genericTCPRedirectMutex sync.RWMutex
+
 	// MITM exclusion configuration
 	excludedDomains = make(map[string]bool)
 	excludedMutex   sync.RWMutex
@@ -180,6 +184,8 @@ func Run() {
 	} else {
 		tlsServerConfig.MinVersion = tls.VersionTLS12
 	}
+
+	genericTCPProxyMain(systemRoots, ca, tlsServerConfig)
 
 	mailMain(systemRoots, ca, tlsServerConfig)
 	if !*disableHTTP {
