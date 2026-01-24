@@ -82,15 +82,6 @@ func httpMain(systemRoots *x509.CertPool, ca tls.Certificate, tlsServerConfig *t
 		}
 	}
 
-	if *enforceCert {
-		tlsServerConfig.ClientAuth = tls.RequestClientCert
-	}
-	if *allowSSL {
-		tlsServerConfig.MinVersion = tls.VersionSSL30
-	} else {
-		tlsServerConfig.MinVersion = tls.VersionTLS12
-	}
-
 	// Configure client side with secure connections but enable AIA chasing
 	tlsClientConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12, // Maintain decent security for outbound

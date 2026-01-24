@@ -110,7 +110,9 @@ For iCloud mail (IMAP only), it looks like `johndoe@@imap.mail.me.com`
 
 **Note:** If your client rejects or "helps" with double @, use lp:johndoe@imap.mail.me.com instead. If it rejects double at even when separated... I don't know what to do. Open an issue and I'll figure out.
 
-In advanced, disable SSL and set the port to 6532 for IMAP, 6533 for SMTP.
+In advanced, disable SSL and set the port to 6532 for IMAP (STARTTLS), 6534 for 6532 for IMAP (direct TLS) and 6533 for SMTP.
+
+**Note:** iOS 6 and other bad devices uses STARTTLS, even when the port is 993 by default.
 
 ## About no-mitm.txt
 

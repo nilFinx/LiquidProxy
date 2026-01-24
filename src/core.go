@@ -58,10 +58,12 @@ var (
 	logURLs                = flag.Bool("log-urls", false, "Print every URL accessed in MITM mode")
 	debug                  = flag.Bool("debug", false, "Enable debug logging (mostly mail only)")
 	httpPort               = flag.Int("http-port", 6531, "HTTP proxy port")
-	imapPort               = flag.Int("imap-port", 6532, "IMAP proxy port")
+	imapSTLSPort           = flag.Int("imap-port", 6532, "IMAP proxy port (STARTTLS)")
+	imapPort               = flag.Int("imap-direct-port", 6534, "IMAP proxy port (direct TLS)")
 	smtpPort               = flag.Int("smtp-port", 6533, "SMTP proxy port")
 	disableHTTP            = flag.Bool("no-http", false, "Disable HTTP proxy")
-	disableIMAP            = flag.Bool("no-imap", false, "Disable IMAP proxy")
+	disableIMAP            = flag.Bool("no-imap-direct", false, "Disable IMAP proxy (direct TLS)")
+	disableIMAPSTARTTLS    = flag.Bool("no-imap", false, "Disable IMAP proxy (STARTTLS)")
 	disableSMTP            = flag.Bool("no-smtp", false, "Disable SMTP proxy")
 
 	// URL redirect configuration
@@ -170,7 +172,16 @@ func Run() {
 		},
 	}
 
-	mailMain(systemRoots, tlsServerConfig)
+	if *enforceCert {
+		tlsServerConfig.ClientAuth = tls.RequestClientCert
+	}
+	if *allowSSL {
+		tlsServerConfig.MinVersion = tls.VersionSSL30
+	} else {
+		tlsServerConfig.MinVersion = tls.VersionTLS12
+	}
+
+	mailMain(systemRoots, ca, tlsServerConfig)
 	if !*disableHTTP {
 		httpMain(systemRoots, ca, tlsServerConfig)
 	} else {

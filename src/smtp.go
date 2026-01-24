@@ -2,6 +2,7 @@ package liquidproxy
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -12,14 +13,56 @@ import (
 
 // handleSMTP handles SMTP protocol specifics
 func (mp *MailProxy) handleSMTP(mc *MailConnection) {
+	// Peek at the ClientHello to determine routing
+	clientHello, err := peekClientHello(mc.clientConn)
+	if err != nil {
+		return
+	}
+
+	if clientHello.isModernClient && *blockModernConnections {
+		return
+	}
+
+	var sConfig *tls.Config
+	// Create TLS server config
+	if mp.ServerTLSConfig == nil {
+		sConfig = new(tls.Config)
+	} else {
+		sConfig = mp.ServerTLSConfig
+	}
+	//sConfig.Certificates = []tls.Certificate{sConfig.RootCAs}
+	sConfig.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		return &mp.ServerCA, nil
+	}
+
+	// Create a connection that can replay the ClientHello
+	var tlsConn *tls.Conn
+	if clientHello != nil {
+		// We have already read the ClientHello, so we need to create a special connection
+		// that will replay it when the TLS handshake starts
+		replayConn := &replayConn{
+			Conn:   mc.clientConn,
+			buffer: bytes.NewBuffer(clientHello.raw),
+		}
+		tlsConn = tls.Server(replayConn, sConfig)
+	} else {
+		// No ClientHello was peeked, proceed normally
+		tlsConn = tls.Server(mc.clientConn, sConfig)
+	}
+
+	// Perform TLS handshake
+	err = tlsConn.Handshake()
+	if mc.debug {
+		log.Printf("[%s] Handshake finish", mc.id)
+	}
+	tReader := bufio.NewReader(tlsConn)
 	// Send initial SMTP greeting
 	greeting := "220 localhost LiquidProxy SMTP server ready\r\n"
-	mc.writer.WriteString(greeting)
-	mc.writer.Flush()
+	tlsConn.Write([]byte(greeting))
 
 	// Process commands until we get authentication
 	for {
-		line, err := mc.reader.ReadString('\n')
+		line, err := tReader.ReadString('\n')
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("[%s] Error reading from client: %v", mc.id, err)
@@ -43,21 +86,20 @@ func (mp *MailProxy) handleSMTP(mc *MailConnection) {
 			}
 
 			if command == "EHLO" {
-				mc.writer.WriteString(fmt.Sprintf("250-localhost Hello %s\r\n", domain))
-				mc.writer.WriteString("250-AUTH PLAIN LOGIN\r\n")
-				mc.writer.WriteString("250-8BITMIME\r\n")
-				mc.writer.WriteString("250 OK\r\n")
+				tlsConn.Write([]byte(fmt.Sprintf("250-localhost Hello %s\r\n", domain)))
+				tlsConn.Write([]byte("250-AUTH PLAIN LOGIN\r\n"))
+				tlsConn.Write([]byte("250-8BITMIME\r\n"))
+				tlsConn.Write([]byte("250 OK\r\n"))
 			} else {
-				mc.writer.WriteString(fmt.Sprintf("250 localhost Hello %s\r\n", domain))
+				tlsConn.Write([]byte(fmt.Sprintf("250 localhost Hello %s\r\n", domain)))
 			}
-			mc.writer.Flush()
 
 		case "AUTH":
 			// Parse AUTH command
 			authParts := strings.Fields(line)
 			if len(authParts) < 2 {
-				mc.writer.WriteString("501 Syntax error\r\n")
-				mc.writer.Flush()
+				tlsConn.Write([]byte("501 Syntax error\r\n"))
+
 				continue
 			}
 
@@ -65,42 +107,40 @@ func (mp *MailProxy) handleSMTP(mc *MailConnection) {
 
 			if authType == "LOGIN" {
 				// Handle AUTH LOGIN
-				mc.writer.WriteString("334 VXNlcm5hbWU6\r\n") // Base64 for "Username:"
-				mc.writer.Flush()
+				tlsConn.Write([]byte("334 VXNlcm5hbWU6\r\n")) // Base64 for "Username:"
 
 				// Read username
-				userLine, err := mc.reader.ReadString('\n')
+				userLine, err := tReader.ReadString('\n')
 				if err != nil {
 					return
 				}
 
 				username, err := decodeBase64(strings.TrimSpace(userLine))
 				if err != nil {
-					mc.writer.WriteString("501 Invalid username encoding\r\n")
-					mc.writer.Flush()
+					tlsConn.Write([]byte("501 Invalid username encoding\r\n"))
+
 					return
 				}
 
 				// Parse username for server info
 				if err := mc.parseUsername(username); err != nil {
-					mc.writer.WriteString(fmt.Sprintf("535 %v\r\n", err))
-					mc.writer.Flush()
+					tlsConn.Write([]byte(fmt.Sprintf("535 %v\r\n", err)))
+
 					return
 				}
 
-				mc.writer.WriteString("334 UGFzc3dvcmQ6\r\n") // Base64 for "Password:"
-				mc.writer.Flush()
+				tlsConn.Write([]byte("334 UGFzc3dvcmQ6\r\n")) // Base64 for "Password:"
 
 				// Read password
-				passLine, err := mc.reader.ReadString('\n')
+				passLine, err := tReader.ReadString('\n')
 				if err != nil {
 					return
 				}
 
 				password, err := decodeBase64(strings.TrimSpace(passLine))
 				if err != nil {
-					mc.writer.WriteString("501 Invalid password encoding\r\n")
-					mc.writer.Flush()
+					tlsConn.Write([]byte("501 Invalid password encoding\r\n"))
+
 					return
 				}
 
@@ -117,8 +157,8 @@ func (mp *MailProxy) handleSMTP(mc *MailConnection) {
 						if mc.debug {
 							log.Printf("[%s] Failed to connect on port 465: %v", mc.id, err)
 						}
-						mc.writer.WriteString("535 Failed to connect to server\r\n")
-						mc.writer.Flush()
+						tlsConn.Write([]byte("535 Failed to connect to server\r\n"))
+
 						return
 					}
 				}
@@ -131,21 +171,15 @@ func (mp *MailProxy) handleSMTP(mc *MailConnection) {
 					if mc.debug {
 						log.Printf("[%s] SMTP authentication failed: %v", mc.id, err)
 					}
-					mc.writer.WriteString("535 Authentication failed\r\n")
-					mc.writer.Flush()
+					tlsConn.Write([]byte("535 Authentication failed\r\n"))
+
 					return
 				}
 
 				if mc.debug {
 					log.Printf("[%s] SMTP authentication succeeded, sending 235 to client", mc.id)
 				}
-				mc.writer.WriteString("235 Authentication successful\r\n")
-				if err := mc.writer.Flush(); err != nil {
-					if mc.debug {
-						log.Printf("[%s] Error flushing 235 response: %v", mc.id, err)
-					}
-					return
-				}
+				tlsConn.Write([]byte("235 Authentication successful\r\n"))
 				if mc.debug {
 					log.Printf("[%s] Successfully sent 235 response to client", mc.id)
 				}
@@ -159,7 +193,7 @@ func (mp *MailProxy) handleSMTP(mc *MailConnection) {
 				if mc.debug {
 					log.Printf("[%s] About to switch to transparent proxy mode", mc.id)
 				}
-				mc.transparentProxy()
+				mc.transparentSMTPProxy(tlsConn)
 				if mc.debug {
 					log.Printf("[%s] Returned from transparentProxy()", mc.id)
 				}
@@ -173,10 +207,9 @@ func (mp *MailProxy) handleSMTP(mc *MailConnection) {
 					credentials = authParts[2]
 				} else {
 					// Request credentials
-					mc.writer.WriteString("334 \r\n")
-					mc.writer.Flush()
+					tlsConn.Write([]byte("334 \r\n"))
 
-					credLine, err := mc.reader.ReadString('\n')
+					credLine, err := tReader.ReadString('\n')
 					if err != nil {
 						return
 					}
@@ -186,16 +219,16 @@ func (mp *MailProxy) handleSMTP(mc *MailConnection) {
 				// Decode and parse credentials
 				decoded, err := decodeBase64(credentials)
 				if err != nil {
-					mc.writer.WriteString("501 Invalid credentials encoding\r\n")
-					mc.writer.Flush()
+					tlsConn.Write([]byte("501 Invalid credentials encoding\r\n"))
+
 					return
 				}
 
 				// AUTH PLAIN format: \0username\0password
 				parts := strings.Split(decoded, "\x00")
 				if len(parts) != 3 {
-					mc.writer.WriteString("501 Invalid AUTH PLAIN format\r\n")
-					mc.writer.Flush()
+					tlsConn.Write([]byte("501 Invalid AUTH PLAIN format\r\n"))
+
 					return
 				}
 
@@ -204,8 +237,8 @@ func (mp *MailProxy) handleSMTP(mc *MailConnection) {
 
 				// Parse username for server info
 				if err := mc.parseUsername(username); err != nil {
-					mc.writer.WriteString(fmt.Sprintf("535 %v\r\n", err))
-					mc.writer.Flush()
+					tlsConn.Write([]byte(fmt.Sprintf("535 %v\r\n", err)))
+
 					return
 				}
 
@@ -222,8 +255,8 @@ func (mp *MailProxy) handleSMTP(mc *MailConnection) {
 						if mc.debug {
 							log.Printf("[%s] Failed to connect on port 465: %v", mc.id, err)
 						}
-						mc.writer.WriteString("535 Failed to connect to server\r\n")
-						mc.writer.Flush()
+						tlsConn.Write([]byte("535 Failed to connect to server\r\n"))
+
 						return
 					}
 				}
@@ -236,21 +269,21 @@ func (mp *MailProxy) handleSMTP(mc *MailConnection) {
 					if mc.debug {
 						log.Printf("[%s] SMTP authentication failed: %v", mc.id, err)
 					}
-					mc.writer.WriteString("535 Authentication failed\r\n")
-					mc.writer.Flush()
+					tlsConn.Write([]byte("535 Authentication failed\r\n"))
+
 					return
 				}
 
 				if mc.debug {
 					log.Printf("[%s] SMTP authentication succeeded, sending 235 to client", mc.id)
 				}
-				mc.writer.WriteString("235 Authentication successful\r\n")
-				if err := mc.writer.Flush(); err != nil {
+				tlsConn.Write([]byte("235 Authentication successful\r\n"))
+				/*if err :=; err != nil {
 					if mc.debug {
 						log.Printf("[%s] Error flushing 235 response: %v", mc.id, err)
 					}
 					return
-				}
+				}*/
 				if mc.debug {
 					log.Printf("[%s] Successfully sent 235 response to client", mc.id)
 				}
@@ -264,34 +297,32 @@ func (mp *MailProxy) handleSMTP(mc *MailConnection) {
 				if mc.debug {
 					log.Printf("[%s] About to switch to transparent proxy mode", mc.id)
 				}
-				mc.transparentProxy()
+				mc.transparentSMTPProxy(tlsConn)
 				if mc.debug {
 					log.Printf("[%s] Returned from transparentProxy()", mc.id)
 				}
 				return
 
 			} else {
-				mc.writer.WriteString("504 Unrecognized authentication type\r\n")
-				mc.writer.Flush()
+				tlsConn.Write([]byte("504 Unrecognized authentication type\r\n"))
+
 			}
 
 		case "QUIT":
-			mc.writer.WriteString("221 Bye\r\n")
-			mc.writer.Flush()
+			tlsConn.Write([]byte("221 Bye\r\n"))
+
 			return
 
 		case "NOOP":
-			mc.writer.WriteString("250 OK\r\n")
-			mc.writer.Flush()
+			tlsConn.Write([]byte("250 OK\r\n"))
 
 		case "RSET":
-			mc.writer.WriteString("250 OK\r\n")
-			mc.writer.Flush()
+			tlsConn.Write([]byte("250 OK\r\n"))
 
 		default:
 			// Before authentication, reject other commands
-			mc.writer.WriteString("530 Please authenticate first\r\n")
-			mc.writer.Flush()
+			tlsConn.Write([]byte("530 Please authenticate first\r\n"))
+
 		}
 	}
 }
@@ -512,7 +543,7 @@ func (mc *MailConnection) authenticateSMTP(authType, username, password string, 
 }
 
 // transparentSMTPProxy handles SMTP-specific transparent proxying with MAIL FROM rewriting
-func (mc *MailConnection) transparentSMTPProxy() {
+func (mc *MailConnection) transparentSMTPProxy(tlsConn *tls.Conn) {
 	if mc.debug {
 		log.Printf("[%s] Entered transparentSMTPProxy", mc.id)
 	}
@@ -528,13 +559,13 @@ func (mc *MailConnection) transparentSMTPProxy() {
 			if mc.debug {
 				log.Printf("[%s] Server response: %s", mc.id, line)
 			}
-			mc.writer.WriteString(line + "\r\n")
-			if err := mc.writer.Flush(); err != nil {
+			tlsConn.Write([]byte(line + "\r\n"))
+			/*if err :=; err != nil {
 				if mc.debug {
 					log.Printf("[%s] Error flushing server response to client: %v", mc.id, err)
 				}
 				break
-			}
+			}*/
 		}
 		if err := scanner.Err(); err != nil && mc.debug {
 			log.Printf("[%s] Server scanner error: %v", mc.id, err)
@@ -542,17 +573,17 @@ func (mc *MailConnection) transparentSMTPProxy() {
 		if mc.debug {
 			log.Printf("[%s] Server-to-client relay goroutine exiting", mc.id)
 		}
-		mc.Close()
+		tlsConn.Close()
 	}()
 
 	// Client to server - rewrite MAIL FROM commands
 	if mc.debug {
 		log.Printf("[%s] Starting client-to-server relay loop", mc.id)
-		log.Printf("[%s] clientConn type: %T", mc.id, mc.clientConn)
+		log.Printf("[%s] clientConn type: %T", mc.id, tlsConn)
 		log.Printf("[%s] serverConn type: %T", mc.id, mc.serverConn)
 	}
 
-	scanner := bufio.NewScanner(mc.clientConn)
+	scanner := bufio.NewScanner(tlsConn)
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -631,5 +662,5 @@ func (mc *MailConnection) transparentSMTPProxy() {
 		log.Printf("[%s] Client-to-server relay loop exited", mc.id)
 	}
 
-	mc.Close()
+	tlsConn.Close()
 }

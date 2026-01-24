@@ -1,43 +1,136 @@
 package liquidproxy
 
 import (
+	"bufio"
+	"bytes"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"strings"
+	"time"
 )
 
-// handleIMAP handles IMAP protocol specifics
-func (mp *MailProxy) handleIMAP(mc *MailConnection) {
-	// Send initial IMAP greeting
-	greeting := "* OK LiquidProxy IMAP server ready\r\n"
-	mc.writer.WriteString(greeting)
-	mc.writer.Flush()
-
-	// Process commands until we get authentication
+func imapCommandGet(cReader *bufio.Reader, mcid string, conn net.Conn, debug bool) (end bool, t string, cmd string, part []string) {
 	for {
-		line, err := mc.reader.ReadString('\n')
+		line, err := cReader.ReadString('\n')
 		if err != nil {
 			if err != io.EOF {
-				log.Printf("[%s] Error reading from client: %v", mc.id, err)
+				log.Printf("[%s] Error reading from client: %v", mcid, err)
 			}
-			return
+			return true, "", "", []string{}
 		}
 
-		if mc.debug {
-			log.Printf("[%s] Client: %s", mc.id, strings.TrimSpace(line))
+		if debug {
+			log.Printf("[%s] Client: %s", mcid, strings.TrimSpace(line))
 		}
 
 		// Parse IMAP command
 		parts := strings.Fields(line)
 		if len(parts) < 2 {
-			mc.writer.WriteString("* BAD Invalid command\r\n")
-			mc.writer.Flush()
+			conn.Write([]byte("* BAD Invalid command\r\n"))
 			continue
 		}
 
 		tag := parts[0]
 		command := strings.ToUpper(parts[1])
+		return false, tag, command, parts
+	}
+}
+
+// handleIMAP handles IMAP protocol specifics
+func (mp *MailProxy) handleIMAP(mc *MailConnection, STARTTLS bool) {
+	HELLO := []byte("* OK i will be launching a court case against apple for waiting for data even with MAIL over TLS/SSL port\r\n")
+	conn := mc.clientConn
+	if STARTTLS {
+		cReader := bufio.NewReader(conn)
+		// Send initial IMAP greeting
+		conn.SetDeadline(time.Now().Add(10 * time.Second))
+		conn.Write(HELLO)
+
+		for { // until STARTTLS
+			end, tag, command, _ := imapCommandGet(cReader, mc.id, conn, mc.debug)
+			if end {
+				return
+			}
+
+			if command == "STARTTLS" {
+				conn.Write([]byte(fmt.Sprintf("%s OK Begin TLS negotiation now\r\n", tag)))
+				break // Woo!
+			} else if command == "CAPABILITY" {
+				// Respond with basic capabilities
+				// AUTH=PLAIN AUTH=LOGIN
+				conn.Write([]byte("* CAPABILITY IMAP4rev1 STARTTLS\r\n"))
+				conn.Write([]byte(fmt.Sprintf("%s OK CAPABILITY completed\r\n", tag)))
+
+			} else if command == "NOOP" {
+				conn.Write([]byte(fmt.Sprintf("%s OK NOOP Fuck Apple\r\n", tag)))
+
+			} else if command == "LOGOUT" {
+				conn.Write([]byte("* BYE LiquidProxy logging out\r\n"))
+				conn.Write([]byte(fmt.Sprintf("%s OK LOGOUT completed\r\n", tag)))
+				return
+
+			} else {
+				// Before authentication, reject other commands
+				conn.Write([]byte(fmt.Sprintf("%s NO Please authenticate first\r\n", tag)))
+			}
+		}
+	}
+	// Peek at the ClientHello to determine routing
+	clientHello, err := peekClientHello(conn)
+	if err != nil {
+		return
+	}
+
+	if clientHello.isModernClient && *blockModernConnections {
+		return
+	}
+
+	var sConfig *tls.Config
+	// Create TLS server config
+	if mp.ServerTLSConfig == nil {
+		sConfig = new(tls.Config)
+	} else {
+		sConfig = mp.ServerTLSConfig
+	}
+	//sConfig.Certificates = []tls.Certificate{sConfig.RootCAs}
+	sConfig.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		return &mp.ServerCA, nil
+	}
+
+	// Create a connection that can replay the ClientHello
+	var tlsConn *tls.Conn
+	if clientHello != nil {
+		// We have already read the ClientHello, so we need to create a special connection
+		// that will replay it when the TLS handshake starts
+		replayConn := &replayConn{
+			Conn:   conn,
+			buffer: bytes.NewBuffer(clientHello.raw),
+		}
+		tlsConn = tls.Server(replayConn, sConfig)
+	} else {
+		// No ClientHello was peeked, proceed normally
+		tlsConn = tls.Server(conn, sConfig)
+	}
+
+	// Perform TLS handshake
+	err = tlsConn.Handshake()
+	if mc.debug {
+		log.Printf("[%s] Handshake finish", mc.id)
+	}
+	tReader := bufio.NewReader(tlsConn)
+	tWriter := bufio.NewWriter(tlsConn)
+	tlsConn.Write(HELLO)
+	for { // until LOGIN
+		end, tag, command, parts := imapCommandGet(tReader, mc.id, tlsConn, mc.debug)
+		if end {
+			if mc.debug {
+				log.Printf("[%s] The end...", mc.id)
+			}
+			return
+		}
 
 		// Check for authentication commands
 		if command == "LOGIN" && len(parts) >= 4 {
@@ -47,23 +140,20 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection) {
 
 			// Parse username for server info
 			if err := mc.parseUsername(username); err != nil {
-				mc.writer.WriteString(fmt.Sprintf("%s NO %v\r\n", tag, err))
-				mc.writer.Flush()
+				tlsConn.Write([]byte(fmt.Sprintf("%s NO %v\r\n", tag, err)))
 				return
 			}
 
 			// Connect to real server
 			if err := mc.connectToServer(mp.TLSConfig, mp.DefaultRemotePort); err != nil {
-				mc.writer.WriteString(fmt.Sprintf("%s NO Failed to connect to server: %v\r\n", tag, err))
-				mc.writer.Flush()
+				tlsConn.Write([]byte(fmt.Sprintf("%s NO Failed to connect to server: %v\r\n", tag, err)))
 				return
 			}
 
 			// Read server greeting
 			serverGreeting, err := mc.serverReader.ReadString('\n')
 			if err != nil {
-				mc.writer.WriteString(fmt.Sprintf("%s NO Failed to read server greeting\r\n", tag))
-				mc.writer.Flush()
+				tlsConn.Write([]byte(fmt.Sprintf("%s NO Failed to read server greeting\r\n", tag)))
 				return
 			}
 
@@ -79,14 +169,12 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection) {
 			// Read response
 			response, err := mc.readIMAPResponse(tag)
 			if err != nil {
-				mc.writer.WriteString(fmt.Sprintf("%s NO Authentication failed\r\n", tag))
-				mc.writer.Flush()
+				tlsConn.Write([]byte(fmt.Sprintf("%s NO Authentication failed\r\n", tag)))
 				return
 			}
 
 			// Forward response to client
-			mc.writer.WriteString(response)
-			mc.writer.Flush()
+			tlsConn.Write([]byte(response))
 
 			// Check if authentication succeeded
 			if strings.Contains(response, tag+" OK") {
@@ -96,7 +184,7 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection) {
 				}
 
 				// Switch to transparent proxy mode
-				mc.transparentProxy()
+				mc.transparentProxy(tlsConn, conn, tReader, tWriter)
 				return
 			}
 
@@ -107,30 +195,26 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection) {
 			authType := strings.ToUpper(parts[2])
 			if authType == "PLAIN" {
 				// Send continuation response
-				mc.writer.WriteString("+ \r\n")
-				mc.writer.Flush()
+				tlsConn.Write([]byte("+ \r\n"))
 
 				// Read base64 encoded credentials
 				credLine, err := mc.reader.ReadString('\n')
 				if err != nil {
-					mc.writer.WriteString(fmt.Sprintf("%s NO Authentication failed\r\n", tag))
-					mc.writer.Flush()
+					tlsConn.Write([]byte(fmt.Sprintf("%s NO Authentication failed\r\n", tag)))
 					return
 				}
 
 				// Decode credentials
 				decoded, err := decodeBase64(strings.TrimSpace(credLine))
 				if err != nil {
-					mc.writer.WriteString(fmt.Sprintf("%s NO Invalid credentials encoding\r\n", tag))
-					mc.writer.Flush()
+					tlsConn.Write([]byte(fmt.Sprintf("%s NO Invalid credentials encoding\r\n", tag)))
 					return
 				}
 
 				// AUTH PLAIN format: \0username\0password
 				parts := strings.Split(decoded, "\x00")
 				if len(parts) != 3 {
-					mc.writer.WriteString(fmt.Sprintf("%s NO Invalid AUTH PLAIN format\r\n", tag))
-					mc.writer.Flush()
+					tlsConn.Write([]byte(fmt.Sprintf("%s NO Invalid AUTH PLAIN format\r\n", tag)))
 					return
 				}
 
@@ -139,23 +223,20 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection) {
 
 				// Parse username for server info
 				if err := mc.parseUsername(username); err != nil {
-					mc.writer.WriteString(fmt.Sprintf("%s NO %v\r\n", tag, err))
-					mc.writer.Flush()
+					tlsConn.Write([]byte(fmt.Sprintf("%s NO %v\r\n", tag, err)))
 					return
 				}
 
 				// Connect to real server
 				if err := mc.connectToServer(mp.TLSConfig, mp.DefaultRemotePort); err != nil {
-					mc.writer.WriteString(fmt.Sprintf("%s NO Failed to connect to server: %v\r\n", tag, err))
-					mc.writer.Flush()
+					tlsConn.Write([]byte(fmt.Sprintf("%s NO Failed to connect to server: %v\r\n", tag, err)))
 					return
 				}
 
 				// Read server greeting
 				serverGreeting, err := mc.serverReader.ReadString('\n')
 				if err != nil {
-					mc.writer.WriteString(fmt.Sprintf("%s NO Failed to read server greeting\r\n", tag))
-					mc.writer.Flush()
+					tlsConn.Write([]byte(fmt.Sprintf("%s NO Failed to read server greeting\r\n", tag)))
 					return
 				}
 
@@ -170,8 +251,7 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection) {
 				// Read continuation response
 				contResp, err := mc.serverReader.ReadString('\n')
 				if err != nil || !strings.HasPrefix(contResp, "+") {
-					mc.writer.WriteString(fmt.Sprintf("%s NO Server rejected authentication\r\n", tag))
-					mc.writer.Flush()
+					tlsConn.Write([]byte(fmt.Sprintf("%s NO Server rejected authentication\r\n", tag)))
 					return
 				}
 
@@ -183,14 +263,12 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection) {
 				// Read response
 				response, err := mc.readIMAPResponse(tag)
 				if err != nil {
-					mc.writer.WriteString(fmt.Sprintf("%s NO Authentication failed\r\n", tag))
-					mc.writer.Flush()
+					tlsConn.Write([]byte(fmt.Sprintf("%s NO Authentication failed\r\n", tag)))
 					return
 				}
 
 				// Forward response to client
-				mc.writer.WriteString(response)
-				mc.writer.Flush()
+				tlsConn.Write([]byte(response))
 
 				// Check if authentication succeeded
 				if strings.Contains(response, tag+" OK") {
@@ -200,37 +278,29 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection) {
 					}
 
 					// Switch to transparent proxy mode
-					mc.transparentProxy()
+					mc.transparentProxy(tlsConn, conn, tReader, tWriter)
 					return
 				}
 
 				// Authentication failed
 				return
 			} else {
-				mc.writer.WriteString(fmt.Sprintf("%s NO Unsupported authentication mechanism\r\n", tag))
-				mc.writer.Flush()
+				tlsConn.Write([]byte(fmt.Sprintf("%s NO Unsupported authentication mechanism\r\n", tag)))
 			}
-
 		} else if command == "CAPABILITY" {
 			// Respond with basic capabilities
-			mc.writer.WriteString("* CAPABILITY IMAP4rev1 AUTH=PLAIN AUTH=LOGIN\r\n")
-			mc.writer.WriteString(fmt.Sprintf("%s OK CAPABILITY completed\r\n", tag))
-			mc.writer.Flush()
-
+			// AUTH=PLAIN AUTH=LOGIN
+			tlsConn.Write([]byte("* CAPABILITY IMAP4rev1 STARTTLS\r\n"))
+			tlsConn.Write([]byte(fmt.Sprintf("%s OK CAPABILITY completed\r\n", tag)))
 		} else if command == "NOOP" {
-			mc.writer.WriteString(fmt.Sprintf("%s OK NOOP completed\r\n", tag))
-			mc.writer.Flush()
-
+			tlsConn.Write([]byte(fmt.Sprintf("%s OK NOOP Fuck Apple\r\n", tag)))
 		} else if command == "LOGOUT" {
-			mc.writer.WriteString("* BYE LiquidProxy logging out\r\n")
-			mc.writer.WriteString(fmt.Sprintf("%s OK LOGOUT completed\r\n", tag))
-			mc.writer.Flush()
+			tlsConn.Write([]byte("* BYE LiquidProxy logging out\r\n"))
+			tlsConn.Write([]byte(fmt.Sprintf("%s OK LOGOUT completed\r\n", tag)))
 			return
-
 		} else {
 			// Before authentication, reject other commands
-			mc.writer.WriteString(fmt.Sprintf("%s NO Please authenticate first\r\n", tag))
-			mc.writer.Flush()
+			tlsConn.Write([]byte(fmt.Sprintf("%s NO Please authenticate first\r\n", tag)))
 		}
 	}
 }

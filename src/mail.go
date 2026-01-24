@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"time"
 )
 
 // MailProxy handles IMAP and SMTP proxy connections
@@ -17,7 +18,7 @@ type MailProxy struct {
 	Protocol string
 
 	// Listen port
-	Port int
+	Port int // I am amazed!!! I thought it meant the port as in lightning.
 
 	// Default remote port if not specified
 	DefaultRemotePort int
@@ -25,8 +26,16 @@ type MailProxy struct {
 	// TLS config for upstream connections
 	TLSConfig *tls.Config
 
+	// Explaination not needed
+	ServerTLSConfig *tls.Config
+
 	// Enable debug logging
 	Debug bool
+
+	ServerCA tls.Certificate
+
+	// On iPhone 4, where "SSL" is STARTTLS forced, you will need this
+	STARTTLS bool
 }
 
 // MailConnection represents a single mail proxy connection
@@ -46,7 +55,7 @@ type MailConnection struct {
 	debug         bool
 }
 
-func mailMain(systemRoots *x509.CertPool, tlsServerConfig *tls.Config) {
+func mailMain(systemRoots *x509.CertPool, ca tls.Certificate, tlsServerConfig *tls.Config) {
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 		RootCAs:    systemRoots,
@@ -59,9 +68,26 @@ func mailMain(systemRoots *x509.CertPool, tlsServerConfig *tls.Config) {
 			Port:              *imapPort,
 			DefaultRemotePort: 993,
 			TLSConfig:         tlsConfig,
+			ServerTLSConfig:   tlsServerConfig,
 			Debug:             *debug,
+			ServerCA:          ca,
 		}
 		if err := imapProxy.Start(); err != nil {
+			log.Fatal("Failed to start IMAP proxy:", err)
+		}
+	}
+	if !*disableIMAPSTARTTLS {
+		imapStartTLSProxy := &MailProxy{
+			Protocol:          "IMAP",
+			Port:              *imapSTLSPort,
+			DefaultRemotePort: 993,
+			TLSConfig:         tlsConfig,
+			ServerTLSConfig:   tlsServerConfig,
+			Debug:             *debug,
+			STARTTLS:          true,
+			ServerCA:          ca,
+		}
+		if err := imapStartTLSProxy.Start(); err != nil {
 			log.Fatal("Failed to start IMAP proxy:", err)
 		}
 	}
@@ -73,21 +99,28 @@ func mailMain(systemRoots *x509.CertPool, tlsServerConfig *tls.Config) {
 			Port:              *smtpPort,
 			DefaultRemotePort: 587,
 			TLSConfig:         tlsConfig,
+			ServerTLSConfig:   tlsServerConfig,
 			Debug:             *debug,
+			ServerCA:          ca,
 		}
 		if err := smtpProxy.Start(); err != nil {
 			log.Fatal("Failed to start SMTP proxy:", err)
 		}
 	}
 
-	// Print single startup message
-	if !*disableIMAP && !*disableSMTP {
-		log.Printf("Mail Proxy started (IMAP:%d, SMTP:%d)", *imapPort, *smtpPort)
-	} else if !*disableIMAP {
-		log.Printf("Mail Proxy started (IMAP:%d)", *imapPort)
-	} else if !*disableSMTP {
-		log.Printf("Mail Proxy started (SMTP:%d)", *smtpPort)
+	block := ""
+	if !*disableIMAP {
+		block += fmt.Sprintf("IMAP(DIRECT):%d, ", *imapPort)
 	}
+	if !*disableIMAPSTARTTLS {
+		block += fmt.Sprintf("IMAP(STARTTLS):%d, ", *imapSTLSPort)
+	}
+	if !*disableSMTP {
+		block += fmt.Sprintf("SMTP:%d, ", *smtpPort)
+	}
+	block = strings.TrimRight(block, ", ")
+
+	log.Printf("Mail Proxy started (%s)", block)
 }
 
 // Start starts the mail proxy listener
@@ -100,6 +133,7 @@ func (mp *MailProxy) Start() error {
 	go func() {
 		for {
 			conn, err := listener.Accept()
+
 			if err != nil {
 				if mp.Debug {
 					log.Printf("%s proxy accept error: %v", mp.Protocol, err)
@@ -148,17 +182,30 @@ func (mp *MailProxy) handleConnection(clientConn net.Conn) {
 		debug:      mp.Debug,
 	}
 
-	defer mc.Close()
+	//defer mc.Close()
 
 	if mc.debug {
 		log.Printf("[%s] New %s connection from %s", connID, mp.Protocol, clientConn.RemoteAddr())
 	}
 
 	// Handle based on protocol
-	if mp.Protocol == "IMAP" {
-		mp.handleIMAP(mc)
-	} else if mp.Protocol == "SMTP" {
+	switch mp.Protocol {
+	case "IMAP":
+		if mp.STARTTLS {
+			if mc.debug {
+				log.Printf("[%s] It's STARTTLS!", connID)
+			}
+			mp.handleIMAP(mc, true)
+		} else {
+			if mc.debug {
+				log.Printf("[%s] It's direct TLS", connID)
+			}
+			mp.handleIMAP(mc, false)
+		}
+	case "SMTP":
 		mp.handleSMTP(mc)
+	default:
+		log.Fatalf("Something went wrong, the protocol is %s", mp.Protocol)
 	}
 }
 
@@ -264,13 +311,13 @@ func (mc *MailConnection) connectToServer(tlsConfig *tls.Config, port int) error
 }
 
 // transparentProxy switches to transparent proxy mode after authentication
-func (mc *MailConnection) transparentProxy() {
+func (mc *MailConnection) transparentProxy(tlsConn *tls.Conn, conn net.Conn, clr *bufio.Reader, clw *bufio.Writer) {
 	if mc.debug {
 		log.Printf("[%s] Switching to transparent proxy mode", mc.id)
 	}
 
 	// Verify connections are established
-	if mc.clientConn == nil {
+	if tlsConn == nil {
 		if mc.debug {
 			log.Printf("[%s] ERROR: clientConn is nil in transparentProxy", mc.id)
 		}
@@ -285,36 +332,128 @@ func (mc *MailConnection) transparentProxy() {
 
 	// For SMTP, we need to rewrite MAIL FROM commands
 	if mc.protocol == "SMTP" {
-		mc.transparentSMTPProxy()
+		mc.transparentSMTPProxy(tlsConn)
 		return
 	}
 
-	// For IMAP, use simple transparent proxy
-	done := make(chan bool, 2)
+	errc := make(chan error, 2)
 
-	// Client to server
 	go func() {
-		io.Copy(mc.serverConn, mc.clientConn)
-		done <- true
+		if mc.debug {
+			wew := ""
+			var err error
+			for {
+				ibuf := make([]byte, 1)
+				_, err = mc.serverConn.Read(ibuf)
+				if err != nil {
+					break
+				}
+				if len(ibuf) != 0 {
+					sbuf := string(ibuf)
+					if sbuf == "\n" {
+						log.Printf(wew)
+						wew = ""
+					} else {
+						wew += sbuf
+					}
+					_, err = tlsConn.Write(ibuf)
+					if err != nil {
+						break
+					}
+				}
+				err = clw.Flush()
+				if err != nil {
+					break
+				}
+			}
+			errc <- err
+		} else {
+			_, err := io.Copy(tlsConn, mc.serverConn)
+			errc <- err
+		}
 	}()
 
-	// Server to client
 	go func() {
-		io.Copy(mc.clientConn, mc.serverConn)
-		done <- true
+		if mc.debug {
+			wew := ""
+			stack := ""
+			var err error
+			for {
+				ibuf := make([]byte, 1)
+				_, err = tlsConn.Read(ibuf)
+				if err != nil {
+					break
+				}
+				stack += string(ibuf)
+				if len(ibuf) != 0 {
+					sbuf := string(ibuf)
+					if sbuf == "\n" {
+						log.Printf(wew)
+						wew = ""
+					} else {
+						wew += sbuf
+					}
+					_, err = mc.serverConn.Write(ibuf)
+					if err != nil {
+						break
+					}
+				}
+				err = clw.Flush()
+				if err != nil {
+					break
+				}
+			}
+			errc <- err
+		} else {
+			_, err := io.Copy(mc.serverConn, tlsConn)
+			errc <- err
+		}
 	}()
 
-	// Wait for either direction to complete
-	<-done
+	err2 := <-errc
 
-	// Close connections
-	mc.Close()
+	if mc.debug {
+		log.Printf("[%s] Close starting", mc.id)
+	}
+
+	tlsConn.CloseWrite()
+
+	err1 := <-errc
+
+	ignore := func(err error) bool {
+		if err == nil {
+			return true
+		}
+		s := err.Error()
+		return strings.Contains(s, "use of closed network connection") ||
+			strings.Contains(s, "protocol is shutdown") ||
+			strings.Contains(s, "close_notify") ||
+			strings.Contains(s, "i/o timeout") ||
+			err == io.EOF
+	}
+
+	if !ignore(err1) {
+		log.Printf("[%s] copy error: %v", mc.id, err1)
+	}
+	if !ignore(err2) {
+		log.Printf("[%s] copy error: %v", mc.id, err2)
+	}
+
+	if mc.debug {
+		log.Printf("[%s] Goodbye!", mc.id)
+	}
+
+	tlsConn.SetDeadline(time.Time{})
+	mc.serverConn.SetDeadline(time.Time{})
+
+	tlsConn.Close()
+	mc.serverConn.Close()
 }
 
 // Close closes all connections
-func (mc *MailConnection) Close() {
-	if mc.clientConn != nil {
-		mc.clientConn.Close()
+func (mc *MailConnection) Close(tlsConn *tls.Conn) {
+	if tlsConn != nil {
+		tlsConn.Close()
 	}
 	if mc.serverConn != nil {
 		mc.serverConn.Close()
