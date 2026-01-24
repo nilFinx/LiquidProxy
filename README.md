@@ -98,6 +98,8 @@ If you can't have GNU Make for some reason (there is a port of it for Windows), 
 
 ### IMAP/SMTP
 
+**WARNING:** iOS 6 appears to only support TLSv1.1. `-allow-ssl` is required.
+
 **Note:** If you're using iCloud mail, iCloudMailFix from [Victor's Cydia repo](https://repo.victorlobe.me/) is recommended. While manual mail server adding is required like before, it does not require a proxy server.
 
 Set username to `username@domain.com@insert.mail.server.com` (do NOT use double @ here)
@@ -111,6 +113,20 @@ For iCloud mail (IMAP only), it looks like `johndoe@@imap.mail.me.com`
 In advanced, set the port to 6532 for IMAP (STARTTLS), 6534 for 6532 for IMAP (direct TLS) and 6533 for SMTP.
 
 **Note:** iOS 6 and other bad devices uses STARTTLS, even when the port is 993 by default.
+
+### GenericTCP
+
+Create `generic-tcp.text` with:
+
+``` txt
+6591
+_xmpp-client._tcp.disroot.org:5223
+
+6592
+server.service.com:6982
+```
+
+`_name._tcp` part is for utilizing SRV record, and is completely optional. If the first entry in SRV fails, it will fall back to just A record resolving.
 
 ## About no-mitm.txt
 
