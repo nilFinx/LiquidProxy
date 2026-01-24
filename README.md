@@ -9,13 +9,12 @@ getcertpage.html uses CSS from [cydia.saurik.com](https://cydia.saurik.com/), an
 ## What this is
 
 * A fix for "could not start a secure connection" and other TLS/SSL issues
-* Also a plaintext-to-TLS bridge for IMAP/SMTP
+* A way to connect to modern mail servers without TLS version/cipher limit
 
 ## What this isn't
 
 * Complete fix for web browsing
 * Secure way to do anything at all (as you're still seeing the stuff in older ciphers/SSL version)
-* Re-encryption MitM bridge for IMAP/SMTP (to be added)
 * Fix for (insert app name) that has completely different API by now
 * Fix for (insert tweak name) fix
 * A way to browse (very few) laggy websites without lag
@@ -101,8 +100,6 @@ If you can't have GNU Make for some reason (there is a port of it for Windows), 
 
 **Note:** If you're using iCloud mail, iCloudMailFix from [Victor's Cydia repo](https://repo.victorlobe.me/) is recommended. While manual mail server adding is required like before, it does not require a proxy server.
 
-**WARNING:** All mails are plaintext as of now. This will be fixed in future, but for now, stick with iCloud, or providers that allows older TLS version + ciphers.
-
 Set username to `username@domain.com@insert.mail.server.com` (do NOT use double @ here)
 
 If the username is just username, use `username@@insert.mail.server.com`. (double @ = I am not a bot for name@server)
@@ -111,7 +108,7 @@ For iCloud mail (IMAP only), it looks like `johndoe@@imap.mail.me.com`
 
 **Note:** If your client rejects or "helps" with double @, use lp:johndoe@imap.mail.me.com instead. If it rejects double at even when separated... I don't know what to do. Open an issue and I'll figure out.
 
-In advanced, disable SSL and set the port to 6532 for IMAP (STARTTLS), 6534 for 6532 for IMAP (direct TLS) and 6533 for SMTP.
+In advanced, set the port to 6532 for IMAP (STARTTLS), 6534 for 6532 for IMAP (direct TLS) and 6533 for SMTP.
 
 **Note:** iOS 6 and other bad devices uses STARTTLS, even when the port is 993 by default.
 
