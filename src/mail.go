@@ -182,8 +182,6 @@ func (mp *MailProxy) handleConnection(clientConn net.Conn) {
 		debug:      mp.Debug,
 	}
 
-	//defer mc.Close()
-
 	if mc.debug {
 		log.Printf("[%s] New %s connection from %s", connID, mp.Protocol, clientConn.RemoteAddr())
 	}
@@ -448,14 +446,4 @@ func (mc *MailConnection) transparentProxy(tlsConn *tls.Conn, conn net.Conn, clr
 
 	tlsConn.Close()
 	mc.serverConn.Close()
-}
-
-// Close closes all connections
-func (mc *MailConnection) Close(tlsConn *tls.Conn) {
-	if tlsConn != nil {
-		tlsConn.Close()
-	}
-	if mc.serverConn != nil {
-		mc.serverConn.Close()
-	}
 }
