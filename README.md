@@ -66,6 +66,8 @@ Enforcing password is as easy as using `--proxy-password=nilfinx:notpassword`
 
 If you want certificate auth to be enabled, add `--enforce-cert`, although it is not known to do anything as of now.
 
+WARN: Some web browsers are very annoying when enforcing certs. Do not add enforce-cert if you're not happy with that
+
 Note: If an IP passes auth once, it will be passed forever, even when appropriate fields are not supplied.
 
 Unfortunately, spaces are not supported at this time. Fun fact: Apple's CalDAV/CardDAV daemon politely sends the account password as proxy password, which causes an issue with authentication.
@@ -89,9 +91,6 @@ If you can't have GNU Make for some reason (there is a port of it for Windows), 
 * Go to settings > Wi-Fi > (the symbol > next to WiFi network), and set proxy to manual.
 * * The host/IP should be the IP/domain to your server running the proxy. Port is 6531.
 * Go to [lp.r.e.a.l](http://lp.r.e.a.l/) or [liquidproxy.r.e.a.l](http://liquidproxy.r.e.a.l/)
-* * On iOS, use bundle
-* * On Android, use certificate (.cer) + client cert (.p12)
-* * On other, try it and see :p
 * * WARN: On Windows, bundle and client cert does not work. Only other certificates does.
 * Tap Install, and skip any potential warning
 * * Enter passcode when prompted. This does NOT get sent to me/us, or the proxy server admin.
