@@ -25,6 +25,12 @@ type responseTracker struct {
 	wroteHeader bool
 }
 
+// redirectRule represents a URL redirect rule
+type redirectRule struct {
+	fromURL *url.URL
+	toURL   *url.URL
+}
+
 // Proxy is a forward proxy that substitutes its own certificate
 // for incoming TLS connections in place of the upstream server's
 // certificate.

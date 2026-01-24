@@ -14,7 +14,6 @@ import (
 	"math/big"
 	"net"
 	"net/http"
-	"net/url"
 	"os/exec"
 	"strings"
 	"time"
@@ -126,12 +125,6 @@ type clientHelloInfo struct {
 	supportsTLS13  bool
 	supportsHTTP2  bool
 	isModernClient bool
-}
-
-// redirectRule represents a URL redirect rule
-type redirectRule struct {
-	fromURL *url.URL
-	toURL   *url.URL
 }
 
 // parseClientHello parses a TLS ClientHello message to detect modern TLS features
