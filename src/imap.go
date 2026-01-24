@@ -81,6 +81,7 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection, STARTTLS bool) {
 	// Peek at the ClientHello to determine routing
 	clientHello, err := peekClientHello(conn)
 	if err != nil {
+		log.Printf("[%s] Error on peeking handshake: %s", mc.id, err)
 		return
 	}
 
@@ -117,6 +118,10 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection, STARTTLS bool) {
 
 	// Perform TLS handshake
 	err = tlsConn.Handshake()
+	if err != nil {
+		log.Printf("[%s] Error on handshake: %s", mc.id, err)
+		return
+	}
 	if mc.debug {
 		log.Printf("[%s] Handshake finish", mc.id)
 	}
