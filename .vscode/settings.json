@@ -1,0 +1,4 @@
+{
+	"go.diagnostic.vulncheck": "Off",
+	"go.goroot": "F:\\go119"
+}
