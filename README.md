@@ -59,8 +59,10 @@ flags.txt works like a text file full of arguments:
 
 ``` txt
 --debug -remove-prefix
---http-port=2141
+--http-port=2141 -allow-ssl
 ```
+
+`-allow-ssl` allows SSL3.0 or lower to connect, not just TLSv1.2.
 
 Enforcing password is as easy as using `--proxy-password=nilfinx:notpassword`
 
