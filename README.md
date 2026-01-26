@@ -116,7 +116,7 @@ In advanced, set the port to 6532 for IMAP (STARTTLS), 6534 for 6532 for IMAP (d
 
 ### GenericTCP
 
-Create `generic-tcp.text` with:
+Create `generic-tcp.txt` with:
 
 ``` txt
 6591
