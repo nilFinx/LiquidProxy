@@ -16,7 +16,7 @@ getcertpage.html uses CSS from [cydia.saurik.com](https://cydia.saurik.com/), an
 * Complete fix for web browsing
 * Secure way to do anything at all (as you're still seeing the stuff in older ciphers/SSL version)
 * Fix for (insert app name) that has completely different API by now
-* Fix for (insert tweak name) fix
+* Fix for (insert tweak name)
 * A way to browse (very few) laggy websites without lag
 
 ## What this should be used for
