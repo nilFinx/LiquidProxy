@@ -69,8 +69,6 @@ If you want certificate auth to be enabled, add `--enforce-cert`, although it is
 
 WARN: Some web browsers are very annoying when enforcing certs. Do not add enforce-cert if you're not happy with that
 
-Note: If an IP passes auth once, it will be passed forever, even when appropriate fields are not supplied.
-
 Unfortunately, spaces are not supported at this time. Fun fact: Apple's CalDAV/CardDAV daemon politely sends the account password as proxy password, which causes an issue with authentication.
 
 bipas.txt includes a list of websites to never prompt proxy auth for. Do NOT put common websites like google.com here. Only use this for apps that screams "pls auth proxy" because it uses account password for proxy password, like Apple's CalDAV/CardDAV daemon.
