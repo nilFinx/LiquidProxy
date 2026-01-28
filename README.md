@@ -73,8 +73,6 @@ Unfortunately, spaces are not supported at this time. Fun fact: Apple's CalDAV/C
 
 bipas.txt includes a list of websites to never prompt proxy auth for. Do NOT put common websites like google.com here. Only use this for apps that screams "pls auth proxy" because it uses account password for proxy password, like Apple's CalDAV/CardDAV daemon.
 
-WARNING: Auth ignored (bipas.txt) requests will also count as auth pass. Do NOT add common links in bipas.txt!!
-
 ### Compiling
 
 Run `make`, and you'll see liquidproxy(.exe) in the project directory. Just run it!
