@@ -117,7 +117,7 @@ func transparentProxy(upstream http.Handler) http.Handler {
 			w.WriteHeader(403)
 			w.Write([]byte("Banned"))
 		}
-		if r.URL.Host == lpHost1 || r.URL.Host == lpHost2 {
+		if !*disableWebUI && (r.URL.Host == lpHost1 || r.URL.Host == lpHost2) {
 			serveWebUIPlain(w, r)
 			return
 		}
@@ -593,7 +593,7 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 		return
 	}
 
-	if name == lpHost1 || name == lpHost2 {
+	if !*disableWebUI && (name == lpHost1 || name == lpHost2) {
 		serveWebUITLS(tlsConn, host, name, clientHello, connID)
 		return
 	}
