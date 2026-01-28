@@ -87,7 +87,7 @@ var (
 
 func FileCheck(file string) {
 	if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
-		log.Fatalf("%s does not exist. Make sure that %s, %s, %s and %s exists.", file, keyFile, certFile, certFileCer, clientCAFile)
+		log.Fatalf("%s does not exist. Make sure that %s, %s and %s exists.", file, keyFile, certFile, certFileCer)
 	}
 }
 
@@ -112,7 +112,6 @@ func Run() {
 
 	FileCheck(keyFile)
 	FileCheck(certFile)
-	FileCheck(clientCAFile)
 
 	// Setup CPU profiling if requested
 	if *cpuProfile {

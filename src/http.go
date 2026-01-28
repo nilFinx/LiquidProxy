@@ -62,7 +62,7 @@ func httpMain(systemRoots *x509.CertPool, ca tls.Certificate, tlsServerConfig *t
 	if *enforceCert {
 		data, err := os.ReadFile(clientCAFile)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal(fmt.Errorf("%s\nCannot load cllient certificates. Did you really generate them?", err))
 		}
 		for {
 			var block *pem.Block
