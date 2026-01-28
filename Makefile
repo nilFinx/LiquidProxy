@@ -6,9 +6,7 @@ endif
 all: build
 
 dev:
-	$(MAKE) build
-	$(MAKE) run
-
+	go run main.go
 run:
 	liquidproxy$(EXE) $(ARGS) $(HTTP-ARGS)
 
