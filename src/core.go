@@ -61,11 +61,13 @@ var (
 	imapSTLSPort           = flag.Int("imap-port", 6532, "IMAP proxy port (STARTTLS)")
 	imapPort               = flag.Int("imap-direct-port", 6534, "IMAP proxy port (direct TLS)")
 	smtpPort               = flag.Int("smtp-port", 6533, "SMTP proxy port")
+	xmppPort               = flag.Int("xmpp-port", 6536, "XMPP proxy port")
 	disableWebUI           = flag.Bool("no-webui", false, "Disable web UI")
 	disableHTTP            = flag.Bool("no-http", false, "Disable HTTP proxy")
 	disableIMAP            = flag.Bool("no-imap-direct", false, "Disable IMAP proxy (direct TLS)")
 	disableIMAPSTARTTLS    = flag.Bool("no-imap", false, "Disable IMAP proxy (STARTTLS)")
 	disableSMTP            = flag.Bool("no-smtp", false, "Disable SMTP proxy")
+	enableXMPP             = flag.Bool("enable-xmpp", false, "Enable XMPP proxy")
 
 	// URL redirect configuration
 	redirectRules   = make(map[string][]redirectRule)
@@ -188,6 +190,8 @@ func Run() {
 	genericTCPProxyMain(systemRoots, ca, tlsServerConfig)
 
 	mailMain(systemRoots, ca, tlsServerConfig)
+	xmppMain(systemRoots, ca, tlsServerConfig)
+
 	if !*disableHTTP {
 		httpMain(systemRoots, ca, tlsServerConfig)
 	} else {
