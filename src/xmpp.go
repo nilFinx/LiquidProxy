@@ -182,7 +182,9 @@ func (p *XMPPProxy) handleConnection(clientConn net.Conn) {
 			conn.Write([]byte("<proceed xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>"))
 			break // Woo!
 		} else {
-			log.Printf("XMPP: Got unknown command, closing")
+			if c.debug {
+				log.Printf("XMPP: Got unknown command, closing")
+			}
 			conn.Close()
 			return
 		}
@@ -263,10 +265,6 @@ func (c *XMPPConnection) connectToServer(tlsConfig *tls.Config, port int) error 
 	server := host
 	if !strings.Contains(server, ":") {
 		server = fmt.Sprintf("%s:%d", server, port)
-	}
-
-	if c.debug {
-		log.Printf("[%s] Connecting to %s", c.id, server)
 	}
 
 	if c.debug {
@@ -450,29 +448,4 @@ func xmppCommandGet(cReader *bufio.Reader, mcid string, conn net.Conn, debug boo
 	}
 
 	return false, line
-}
-
-// readIMAPResponse reads a complete IMAP response for a given tag
-func (c *XMPPConnection) readXMPPResponse(tag string) (string, error) {
-	var response strings.Builder
-	for {
-		line, err := c.serverReader.ReadString('>')
-		line = strings.Trim(line, " \n")
-		if err != nil {
-			return "", err
-		}
-
-		if c.debug {
-			log.Printf("[%s] Server: %s", c.id, strings.TrimSpace(line))
-		}
-
-		response.WriteString(line)
-
-		// Check if this is the tagged response
-		if strings.HasPrefix(line, tag+" ") {
-			break
-		}
-	}
-
-	return response.String(), nil
 }
