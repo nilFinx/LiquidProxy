@@ -66,19 +66,17 @@ func xmppMain(systemRoots *x509.CertPool, ca tls.Certificate, tlsServerConfig *t
 			Debug:             *debug,
 			ServerCA:          ca,
 		}
-		if err := proxy.Start(); err != nil {
-			log.Fatal("Failed to start XMPP proxy:", err)
-		}
-	}
+		proxy.Start()
 
-	log.Printf("XMPP Proxy started (%d)", *xmppPort)
+		log.Printf("XMPP Proxy started (%d)", *xmppPort)
+	}
 }
 
 // Start starts the mail proxy listener
-func (p *XMPPProxy) Start() error {
+func (p *XMPPProxy) Start() {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", p.Port))
 	if err != nil {
-		return fmt.Errorf("failed to start XMPP proxy on port %d: %w", p.Port, err)
+		log.Fatalf("Failed to start XMPP proxy on port %d: %s", p.Port, err)
 	}
 
 	go func() {
@@ -95,8 +93,6 @@ func (p *XMPPProxy) Start() error {
 			go p.handleConnection(conn)
 		}
 	}()
-
-	return nil
 }
 
 // handleConnection handles a single client connection
