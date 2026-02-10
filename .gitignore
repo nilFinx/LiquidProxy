@@ -1,5 +1,7 @@
 *.cer
 *.pem
+*.p12
+*.mobileconfig
 
 /flags.txt
 /generic-tcp.txt
