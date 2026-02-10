@@ -232,7 +232,7 @@ func (c *GTCPConnection) connectToServer(tlsConfig *tls.Config) error {
 	port := rule.Port
 	fallbackSN := ""
 	if rule.SRV != "" {
-		_, addrs, err := net.LookupSRV(rule.SRV, "tcp", host)
+		_, addrs, err := net.LookupSRV(strings.TrimSuffix(strings.TrimPrefix(rule.SRV, "_"), "._tcp"), "tcp", host)
 		if err == nil {
 			fallbackSN = fmt.Sprintf("%s:%d", host, port)
 			host = addrs[0].Target
@@ -262,7 +262,7 @@ func (c *GTCPConnection) connectToServer(tlsConfig *tls.Config) error {
 	conn, err := tls.Dial("tcp", server, tlsConf)
 	if err != nil {
 		if fallbackSN != "" {
-			conn, err2 := tls.Dial("tcp", server, tlsConf)
+			conn, err2 := tls.Dial("tcp", fallbackSN, tlsConf)
 			if err2 != nil {
 				return fmt.Errorf("%s, %s", err, err2)
 			}
