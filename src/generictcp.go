@@ -130,35 +130,33 @@ func genericTCPProxyMain(systemRoots *x509.CertPool, ca tls.Certificate, tlsServ
 		log.Fatalf("Error loading exclusion rules: %v", err)
 	}
 
-	ClientTLSConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		RootCAs:    systemRoots,
-	}
-
-	for listenPort, rule := range genericTCPRedirectRules {
-		p := &GenericTCPProxy{
-			ListenPort:      listenPort,
-			Rule:            rule,
-			ClientTLSConfig: ClientTLSConfig,
-			ServerTLSConfig: tlsServerConfig,
-			debug:           *debug,
-			ServerCA:        ca,
-		}
-		if err := p.Start(); err != nil {
-			log.Fatalf("Error: %s", err)
-		}
-	}
-
 	if len(genericTCPRedirectPorts) != 0 {
-		log.Printf("Generic TCP proxy started")
+		ClientTLSConfig := &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			RootCAs:    systemRoots,
+		}
+
+		for listenPort, rule := range genericTCPRedirectRules {
+			p := &GenericTCPProxy{
+				ListenPort:      listenPort,
+				Rule:            rule,
+				ClientTLSConfig: ClientTLSConfig,
+				ServerTLSConfig: tlsServerConfig,
+				debug:           *debug,
+				ServerCA:        ca,
+			}
+			p.Start()
+
+			log.Printf("Generic TCP proxy started")
+		}
 	}
 }
 
 // Start starts the mail proxy listener
-func (p *GenericTCPProxy) Start() error {
+func (p *GenericTCPProxy) Start() {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", p.ListenPort))
 	if err != nil {
-		return fmt.Errorf("failed to start proxy on port %d: %w", p.ListenPort, err)
+		log.Fatalf("failed to start proxy on port %d: %s", p.ListenPort, err)
 	}
 
 	go func() {
@@ -170,13 +168,13 @@ func (p *GenericTCPProxy) Start() error {
 					log.Printf("%d proxy accept error: %v", p.ListenPort, err)
 				}
 				continue
+			} else {
+				log.Printf("%d proxy accepted connection", p.ListenPort)
 			}
 
 			go p.handleConnection(conn)
 		}
 	}()
-
-	return nil
 }
 
 // handleConnection handles a single client connection
@@ -282,6 +280,7 @@ func (p *GenericTCPProxy) handleData(c *GTCPConnection) {
 	clientHello, err := peekClientHello(c.clientConn)
 	if err != nil {
 		log.Printf("[%s] Error on peeking handshake: %s", c.id, err)
+		c.clientConn.Close()
 		return
 	}
 
@@ -320,6 +319,7 @@ func (p *GenericTCPProxy) handleData(c *GTCPConnection) {
 	err = tlsConn.Handshake()
 	if err != nil {
 		log.Printf("[%s] Error on peeking handshake: %s", c.id, err)
+		tlsConn.Close()
 		return
 	}
 	if c.debug {
