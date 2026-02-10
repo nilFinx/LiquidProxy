@@ -7,6 +7,10 @@ all: build
 
 dev:
 	go run main.go
+
+# Firewall bypass ish
+windev: build run
+
 run:
 	liquidproxy$(EXE) $(ARGS) $(HTTP-ARGS)
 
