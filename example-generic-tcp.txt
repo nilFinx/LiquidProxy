@@ -1,2 +1,2 @@
-6599
+6539
 _xmpps-client._tcp.disroot.org:5223
