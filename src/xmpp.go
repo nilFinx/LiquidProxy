@@ -18,7 +18,8 @@ type XMPPProxy struct {
 	Port int
 
 	// Default remote port if not specified
-	DefaultRemotePort int
+	DefaultRemotePort     int
+	DefaultRemoteSTLSPort int
 
 	// TLS config for upstream connections
 	TLSConfig *tls.Config
@@ -36,19 +37,20 @@ type XMPPHello struct {
 }
 
 type XMPPConnection struct {
-	id            string
-	clientConn    net.Conn
-	serverConn    net.Conn
-	protocol      string
-	targetServer  string
-	realUsername  string
-	authenticated bool
-	tlsEnabled    bool
-	reader        *bufio.Reader
-	writer        *bufio.Writer
-	serverReader  *bufio.Reader
-	serverWriter  *bufio.Writer
-	debug         bool
+	id                    string
+	clientConn            net.Conn
+	serverConn            net.Conn
+	protocol              string
+	targetServer          string
+	realUsername          string
+	authenticated         bool
+	tlsEnabled            bool
+	reader                *bufio.Reader
+	writer                *bufio.Writer
+	serverReader          *bufio.Reader
+	serverWriter          *bufio.Writer
+	debug                 bool
+	defaultRemoteSTLSPort int
 }
 
 func xmppMain(systemRoots *x509.CertPool, ca tls.Certificate, tlsServerConfig *tls.Config) {
@@ -59,12 +61,13 @@ func xmppMain(systemRoots *x509.CertPool, ca tls.Certificate, tlsServerConfig *t
 
 	if *enableXMPP {
 		proxy := &XMPPProxy{
-			Port:              *xmppPort,
-			DefaultRemotePort: 5223,
-			TLSConfig:         tlsConfig,
-			ServerTLSConfig:   tlsServerConfig,
-			Debug:             *debug,
-			ServerCA:          ca,
+			Port:                  *xmppPort,
+			DefaultRemotePort:     5223,
+			DefaultRemoteSTLSPort: 5222,
+			TLSConfig:             tlsConfig,
+			ServerTLSConfig:       tlsServerConfig,
+			Debug:                 *debug,
+			ServerCA:              ca,
 		}
 		proxy.Start()
 
@@ -121,11 +124,12 @@ func (p *XMPPProxy) handleConnection(clientConn net.Conn) {
 
 	connID := fmt.Sprintf("%p", clientConn)
 	c := &XMPPConnection{
-		id:         connID,
-		clientConn: clientConn,
-		reader:     bufio.NewReader(clientConn),
-		writer:     bufio.NewWriter(clientConn),
-		debug:      p.Debug,
+		id:                    connID,
+		clientConn:            clientConn,
+		reader:                bufio.NewReader(clientConn),
+		writer:                bufio.NewWriter(clientConn),
+		debug:                 p.Debug,
+		defaultRemoteSTLSPort: p.DefaultRemoteSTLSPort,
 	}
 
 	if c.debug {
@@ -232,31 +236,103 @@ func (p *XMPPProxy) handleConnection(clientConn net.Conn) {
 	if c.debug {
 		log.Printf("[%s] Handshake finish", c.id)
 	}
-	tReader := bufio.NewReader(tlsConn)
-	tWriter := bufio.NewWriter(tlsConn)
 	c.targetServer = xh.To
-	// Connect to real server
-	if err := c.connectToServer(p.TLSConfig, p.DefaultRemotePort); err != nil {
+	err, stls := c.connectToServer(p.TLSConfig, p.DefaultRemotePort, false)
+	if stls {
+		if c.debug {
+			log.Printf("[%s] Failed DTLS, attempting STLS", c.id)
+		}
+		err, _ = c.connectToServer(p.TLSConfig, p.DefaultRemoteSTLSPort, true)
+		if err == nil {
+			if c.debug {
+				log.Printf("[%s] Connected", c.id)
+			}
+			scr := bufio.NewReader(c.serverConn)
+			_, err = c.serverConn.Write([]byte("<?xml version=\"1.0\"?>"))
+			_, err = c.serverConn.Write([]byte("<stream:stream xmlns:stream=\"http://etherx.jabber.org/streams\" xml:lang=\"en\" xmlns:xml=\"http://www.w3.org/XML/1998/namespace\" to=\"" + xh.To + "\" xmlns=\"jabber:client\" version=\"1.0\">"))
+			//_, err = c.serverConn.Write([]byte("<starttls xmlns=\"urn:ietf:params:xml:ns:xmpp-tls\"/>\r\n"))
+
+			for { // until STARTTLS
+				end, data := xmppCommandGet(scr, c.id, c.serverConn, c.debug)
+				if end {
+					if c.debug {
+						log.Printf("XMPP connection got cut off")
+					}
+					return
+				}
+				if strings.HasPrefix(data, "<?xml") { // Nobody cares
+				} else if strings.HasPrefix(data, "<stream:stream") {
+				} else if strings.HasPrefix(data, "<required") {
+				} else if strings.HasPrefix(data, "</starttls") {
+				} else if strings.HasPrefix(data, "</stream:features") {
+				} else if strings.HasPrefix(data, "<proceed") {
+					break
+				} else if strings.HasPrefix(data, "<starttls") {
+				} else if strings.HasPrefix(data, "<stream:features") {
+					c.serverConn.Write([]byte("<starttls xmlns=\"urn:ietf:params:xml:ns:xmpp-tls\"/>\r\n"))
+				} else {
+					log.Printf("%s", data)
+					if c.debug {
+						log.Printf("XMPP server: Got unknown command, closing")
+					}
+					c.serverConn.Close()
+					return
+				}
+			}
+
+			if c.debug {
+				log.Printf("[%s] Handshake...", c.id)
+			}
+
+			var tlsConf *tls.Config
+			if p.TLSConfig == nil {
+				tlsConf = &tls.Config{
+					ServerName: c.targetServer,
+				}
+			} else {
+				tlsConf = p.TLSConfig
+				tlsConf.ServerName = c.targetServer
+			}
+
+			stlsConn := tls.Client(c.serverConn, tlsConf)
+			if err := tlsConn.Handshake(); err != nil {
+				conn.Close()
+				log.Printf("[%s] Server TLS handshake failed: %s", c.id, err)
+			}
+			c.serverConn = stlsConn
+			if c.debug {
+				log.Printf("[%s] Handshake should be done now", c.id)
+			}
+			c.transparentProxy(tlsConn)
+			return
+		}
+	}
+	if err != nil {
 		log.Printf("%s", err)
 		tlsConn.Close()
 		return
 	}
 
-	c.transparentProxy(tlsConn, conn, tReader, tWriter)
+	c.transparentProxy(tlsConn)
 }
 
-func (c *XMPPConnection) connectToServer(tlsConfig *tls.Config, port int) error {
-	// Add port if not specified
+func (c *XMPPConnection) connectToServer(tlsConfig *tls.Config, port int, stls bool) (er error, requestsstls bool) {
+	var sn string
+	if stls {
+		sn = "xmpp-client"
+	} else {
+		sn = "xmpps-client"
+	}
 	host := c.targetServer
-
 	fallbackSN := ""
-	_, addrs, err := net.LookupSRV("_xmpp-client._tcp", "tcp", host)
-	if err == nil {
+	_, addrs, err := net.LookupSRV(sn, "tcp", host)
+	if !stls && (addrs[0].Target == "." || addrs[0].Port == 5222 || addrs[0].Port == uint16(c.defaultRemoteSTLSPort)) {
+		return fmt.Errorf("DTLS specified with no server STLS support"), !stls
+	} else {
 		fallbackSN = fmt.Sprintf("%s:%d", host, port)
 		host = addrs[0].Target
 		port = int(addrs[0].Port)
 	}
-
 	// Add port if not specified
 	server := host
 	if !strings.Contains(server, ":") {
@@ -268,35 +344,49 @@ func (c *XMPPConnection) connectToServer(tlsConfig *tls.Config, port int) error 
 	}
 
 	var tlsConf *tls.Config
-	if tlsConfig == nil {
-		tlsConf = &tls.Config{
-			ServerName: host,
+	if !stls {
+		if tlsConfig == nil {
+			tlsConf = &tls.Config{
+				ServerName: host,
+			}
+		} else {
+			tlsConf = tlsConfig
+			tlsConf.ServerName = host
 		}
-	} else {
-		tlsConf = tlsConfig
-		tlsConf.ServerName = host
 	}
 
-	conn, err := tls.Dial("tcp", server, tlsConf)
+	var conn net.Conn
+
+	if !stls {
+		conn, err = tls.Dial("tcp", server, tlsConf)
+	} else {
+		conn, err = net.Dial("tcp", server)
+	}
+
 	if err != nil {
 		if fallbackSN != "" {
-			conn, err2 := tls.Dial("tcp", server, tlsConf)
+			var err2 error
+			if !stls {
+				conn, err2 = tls.Dial("tcp", fallbackSN, tlsConf)
+			} else {
+				conn, err2 = net.Dial("tcp", fallbackSN)
+			}
 			if err2 != nil {
-				return fmt.Errorf("%s, %s", err, err2)
+				return fmt.Errorf("%s, %s", err, err2), !stls
 			}
 			c.serverConn = conn
-			return nil
+			return nil, stls
 		}
-		return err
+		return err, !stls
 	}
 
 	c.serverConn = conn
 
-	return nil
+	return nil, stls
 }
 
 // transparentProxy switches to transparent proxy mode after authentication
-func (c *XMPPConnection) transparentProxy(tlsConn *tls.Conn, conn net.Conn, clr *bufio.Reader, clw *bufio.Writer) {
+func (c *XMPPConnection) transparentProxy(tlsConn *tls.Conn) {
 	if c.debug {
 		log.Printf("[%s] Switching to transparent proxy mode", c.id)
 	}
@@ -318,75 +408,13 @@ func (c *XMPPConnection) transparentProxy(tlsConn *tls.Conn, conn net.Conn, clr 
 	errc := make(chan error, 2)
 
 	go func() {
-		if c.debug {
-			wew := ""
-			var err error
-			for {
-				ibuf := make([]byte, 1)
-				_, err = c.serverConn.Read(ibuf)
-				if err != nil {
-					break
-				}
-				if len(ibuf) != 0 {
-					sbuf := string(ibuf)
-					if sbuf == "\n" {
-						log.Printf(wew)
-						wew = ""
-					} else {
-						wew += sbuf
-					}
-					_, err = tlsConn.Write(ibuf)
-					if err != nil {
-						break
-					}
-				}
-				err = clw.Flush()
-				if err != nil {
-					break
-				}
-			}
-			errc <- err
-		} else {
-			_, err := io.Copy(tlsConn, c.serverConn)
-			errc <- err
-		}
+		_, err := io.Copy(tlsConn, c.serverConn)
+		errc <- err
 	}()
 
 	go func() {
-		if c.debug {
-			wew := ""
-			stack := ""
-			var err error
-			for {
-				ibuf := make([]byte, 1)
-				_, err = tlsConn.Read(ibuf)
-				if err != nil {
-					break
-				}
-				stack += string(ibuf)
-				if len(ibuf) != 0 {
-					sbuf := string(ibuf)
-					if sbuf == "\n" {
-						log.Printf(wew)
-						wew = ""
-					} else {
-						wew += sbuf
-					}
-					_, err = c.serverConn.Write(ibuf)
-					if err != nil {
-						break
-					}
-				}
-				err = clw.Flush()
-				if err != nil {
-					break
-				}
-			}
-			errc <- err
-		} else {
-			_, err := io.Copy(c.serverConn, tlsConn)
-			errc <- err
-		}
+		_, err := io.Copy(c.serverConn, tlsConn)
+		errc <- err
 	}()
 
 	err2 := <-errc
