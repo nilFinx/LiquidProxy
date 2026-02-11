@@ -309,7 +309,7 @@ func (mc *MailConnection) connectToServer(tlsConfig *tls.Config, port int) error
 }
 
 // transparentProxy switches to transparent proxy mode after authentication
-func (mc *MailConnection) transparentProxy(tlsConn *tls.Conn, conn net.Conn, clr *bufio.Reader, clw *bufio.Writer) {
+func (mc *MailConnection) transparentProxy(tlsConn *tls.Conn) {
 	if mc.debug {
 		log.Printf("[%s] Switching to transparent proxy mode", mc.id)
 	}
@@ -337,75 +337,13 @@ func (mc *MailConnection) transparentProxy(tlsConn *tls.Conn, conn net.Conn, clr
 	errc := make(chan error, 2)
 
 	go func() {
-		if mc.debug {
-			wew := ""
-			var err error
-			for {
-				ibuf := make([]byte, 1)
-				_, err = mc.serverConn.Read(ibuf)
-				if err != nil {
-					break
-				}
-				if len(ibuf) != 0 {
-					sbuf := string(ibuf)
-					if sbuf == "\n" {
-						log.Printf(wew)
-						wew = ""
-					} else {
-						wew += sbuf
-					}
-					_, err = tlsConn.Write(ibuf)
-					if err != nil {
-						break
-					}
-				}
-				err = clw.Flush()
-				if err != nil {
-					break
-				}
-			}
-			errc <- err
-		} else {
-			_, err := io.Copy(tlsConn, mc.serverConn)
-			errc <- err
-		}
+		_, err := io.Copy(tlsConn, mc.serverConn)
+		errc <- err
 	}()
 
 	go func() {
-		if mc.debug {
-			wew := ""
-			stack := ""
-			var err error
-			for {
-				ibuf := make([]byte, 1)
-				_, err = tlsConn.Read(ibuf)
-				if err != nil {
-					break
-				}
-				stack += string(ibuf)
-				if len(ibuf) != 0 {
-					sbuf := string(ibuf)
-					if sbuf == "\n" {
-						log.Printf(wew)
-						wew = ""
-					} else {
-						wew += sbuf
-					}
-					_, err = mc.serverConn.Write(ibuf)
-					if err != nil {
-						break
-					}
-				}
-				err = clw.Flush()
-				if err != nil {
-					break
-				}
-			}
-			errc <- err
-		} else {
-			_, err := io.Copy(mc.serverConn, tlsConn)
-			errc <- err
-		}
+		_, err := io.Copy(mc.serverConn, tlsConn)
+		errc <- err
 	}()
 
 	err2 := <-errc

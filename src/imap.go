@@ -126,7 +126,6 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection, STARTTLS bool) {
 		log.Printf("[%s] Handshake finish", mc.id)
 	}
 	tReader := bufio.NewReader(tlsConn)
-	tWriter := bufio.NewWriter(tlsConn)
 	tlsConn.Write(HELLO)
 	for { // until LOGIN
 		end, tag, command, parts := imapCommandGet(tReader, mc.id, tlsConn, mc.debug)
@@ -189,7 +188,7 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection, STARTTLS bool) {
 				}
 
 				// Switch to transparent proxy mode
-				mc.transparentProxy(tlsConn, conn, tReader, tWriter)
+				mc.transparentProxy(tlsConn)
 				return
 			}
 
@@ -283,7 +282,7 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection, STARTTLS bool) {
 					}
 
 					// Switch to transparent proxy mode
-					mc.transparentProxy(tlsConn, conn, tReader, tWriter)
+					mc.transparentProxy(tlsConn)
 					return
 				}
 
