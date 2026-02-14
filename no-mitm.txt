@@ -1,5 +1,9 @@
 swscan.apple.com
 swdist.apple.com
+www.reddit.com
+reddit.com
+old.reddit.com
+
 configuration.apple.com
 init.ess.apple.com
 identity.ess.apple.com
