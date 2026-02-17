@@ -175,19 +175,18 @@ func loadRedirectRules() error {
 	return nil
 }
 
-// loadExclusionRules loads URLs to never MITM from no-mitm.txt
-func loadExclusionRules() error {
-	exclusionFile := "no-mitm.txt"
+// loads every line into an array
+func loadURLRules(filePath string, arr map[string]bool) error {
 
 	// Check if file exists
-	if _, err := os.Stat(exclusionFile); os.IsNotExist(err) {
-		log.Println("Warning: no no-mitm.txt file found")
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		log.Printf("Warning: no %s file found", filePath)
 		return nil
 	}
 
-	file, err := os.Open(exclusionFile)
+	file, err := os.Open(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to open exclusion file: %w", err)
+		return fmt.Errorf("failed to open %s file: %w", filePath, err)
 	}
 	defer file.Close()
 
@@ -213,9 +212,9 @@ func loadExclusionRules() error {
 			}
 
 			if u.Host != "" {
-				excludedDomains[u.Host] = true
+				arr[u.Host] = true
 				if *debug {
-					log.Printf("Excluding domain from MITM: %s", u.Host)
+					log.Printf("Loading a URL for %s: %s", filePath, u.Host)
 				}
 			}
 		} else {
@@ -226,74 +225,15 @@ func loadExclusionRules() error {
 				domain = h
 			}
 
-			excludedDomains[domain] = true
+			arr[domain] = true
 			if *debug {
-				log.Printf("Excluding domain from MITM: %s", domain)
+				log.Printf("Loading a URL for %s: %s", filePath, domain)
 			}
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading exclusion file: %w", err)
-	}
-
-	return nil
-}
-
-// loadBipasRules loads URLs to never ask for auth from bipas.txt
-func loadBipasRules() error {
-	bipasFile := "bipas.txt"
-
-	// Check if file exists
-	if _, err := os.Stat(bipasFile); os.IsNotExist(err) {
-		log.Println("Warning: no bipas.txt file found")
-		return nil
-	}
-
-	file, err := os.Open(bipasFile)
-	if err != nil {
-		return fmt.Errorf("failed to open exclusion file: %w", err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	lineNum := 0
-
-	for scanner.Scan() {
-		lineNum++
-		line := strings.TrimSpace(scanner.Text())
-
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		// Parse URL or domain
-		if strings.Contains(line, "://") {
-			// It's a full URL, extract the domain
-			u, err := url.Parse(line)
-			if err != nil {
-				log.Printf("Warning: Invalid URL on line %d: %s", lineNum, line)
-				continue
-			}
-
-			if u.Host != "" {
-				authExcludedDomains[u.Host] = true
-			}
-		} else {
-			// It's just a domain
-			domain := line
-			// Remove port if present
-			if h, _, err := net.SplitHostPort(domain); err == nil {
-				domain = h
-			}
-
-			authExcludedDomains[domain] = true
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading bipas file: %w", err)
+		return fmt.Errorf("error reading %s file: %w", filePath, err)
 	}
 
 	return nil
