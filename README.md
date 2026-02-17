@@ -6,6 +6,19 @@ LiquidProxy is a fork of [WowFunHappy's Aqua Proxy](https://github.com/wowfunhap
 
 getcertpage.html uses CSS from [cydia.saurik.com](https://cydia.saurik.com/), and few parts of it is taken from Victor Lobe's personal website. ([gh/victorlobe/victorlobe.me](https://github.com/victorlobe/victorlobe.me))
 
+## Ports
+
+* 6531 - HTTP
+* 6532 - IMAP (STARTTLS)
+* 6533 - SMTP (Direct TLS)
+* 6534 - IMAP (Direct TLS)
+
+Ports below have to be manually activated within config.
+
+* 6535 - SMTP (STARTTLS, NOT IMPLEMENTED YET - ASK ME TO IMPLEMENT)
+* 6536 - XMPP (STARTTLS)
+* 6537 - XMPP (Direct TLS, NOT IMPLEMENTED YET)
+
 ## What this is
 
 * A fix for "could not start a secure connection" and other TLS/SSL issues
@@ -40,9 +53,9 @@ getcertpage.html uses CSS from [cydia.saurik.com](https://cydia.saurik.com/), an
 
 Do NOT use any third party instanced of LiquidProxy, unless you trust them. Due to nature of TLS MitM proxies, the server owner is able to see everything that goes through the proxy. HTTPS WEBSITES WILL STILL BE INTERCEPTED! THERE IS NO WAY TO DEFEND AGAINST THIS RISK, OTHER THAN TO HOST YOUR OWN PROXY.
 
-## Guides
+## Documentation
 
-The guides have been migrated [here](https://recycledplist.space/l/lp/configure)
+Documentation is available in [docs](./docs/install.md). Alternatively, use [my website](https://recycledplist.space/projects/liquidproxy/install) like before.
 
 ### Compiling
 
