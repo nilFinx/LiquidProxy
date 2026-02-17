@@ -34,7 +34,7 @@ type redirectRule struct {
 // Proxy is a forward proxy that substitutes its own certificate
 // for incoming TLS connections in place of the upstream server's
 // certificate.
-type Proxy struct {
+type HTTPProxy struct {
 	// Wrap specifies a function for optionally wrapping upstream for
 	// inspecting the decrypted HTTP request and response.
 	Wrap func(upstream http.Handler) http.Handler
@@ -312,7 +312,7 @@ func (rw *responseTracker) Write(b []byte) (int, error) {
 	return rw.ResponseWriter.Write(b)
 }
 
-func (p *Proxy) cert(names ...string) (*tls.Certificate, error) {
+func (p *HTTPProxy) cert(names ...string) (*tls.Certificate, error) {
 	// Create a cache key from the domain names
 	cacheKey := names[0]
 

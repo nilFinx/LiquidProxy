@@ -92,7 +92,7 @@ func httpMain(systemRoots *x509.CertPool, ca tls.Certificate, tlsServerConfig *t
 		ClientSessionCache: tls.NewLRUClientSessionCache(0),
 	}
 
-	p := &Proxy{
+	p := &HTTPProxy{
 		CA:              &ca,
 		TLSServerConfig: tlsServerConfig,
 		TLSClientConfig: tlsClientConfig,
@@ -155,7 +155,7 @@ func transparentProxy(upstream http.Handler) http.Handler {
 	})
 }
 
-func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (p *HTTPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if *blockRemoteConnections {
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
@@ -226,7 +226,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.Wrap(rp).ServeHTTP(w, r)
 }
 
-func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
+func (p *HTTPProxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 	var (
 		name = dnsName(r.Host)
 		host = r.Host
@@ -348,7 +348,7 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 }
 
 // passthroughConnection handles a connection in passthrough mode without TLS interception
-func (p *Proxy) passthroughConnection(clientConn net.Conn, host string, clientHello *clientHelloInfo, connID string, notAuthenticated bool) {
+func (p *HTTPProxy) passthroughConnection(clientConn net.Conn, host string, clientHello *clientHelloInfo, connID string, notAuthenticated bool) {
 	// Connect to the real server
 	serverConn, err := net.Dial("tcp", host)
 	if err != nil {
@@ -401,7 +401,7 @@ func (p *Proxy) passthroughConnection(clientConn net.Conn, host string, clientHe
 }
 
 // handleMITMWithLogging handles MITM connections with HTTP parsing and URL logging/redirects
-func (p *Proxy) handleMITMWithLogging(tlsConn *tls.Conn, serverConn *tls.Conn, host, connID string, checkRedirects bool) {
+func (p *HTTPProxy) handleMITMWithLogging(tlsConn *tls.Conn, serverConn *tls.Conn, host, connID string, checkRedirects bool) {
 	// Read HTTP requests from client and forward to server
 	reader := bufio.NewReader(tlsConn)
 	serverReader := bufio.NewReader(serverConn)
@@ -534,7 +534,7 @@ func (p *Proxy) handleMITMWithLogging(tlsConn *tls.Conn, serverConn *tls.Conn, h
 }
 
 // serveMITM handles a connection in MITM mode with TLS interception
-func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *clientHelloInfo, connID string, notAuthenticated bool) {
+func (p *HTTPProxy) serveMITM(clientConn net.Conn, host, name string, clientHello *clientHelloInfo, connID string, notAuthenticated bool) {
 	// Get certificate from cache or generate new one
 	cert, err := p.cert(name)
 	if err != nil {
