@@ -31,14 +31,17 @@ var (
 	forceMITM     = flag.Bool("force-mitm", false, "Force MITM mode for all HTTP proxy connections that isn't on no-mitm")
 	logURLs       = flag.Bool("log-urls", false, "Print every URL accessed in MITM mode")
 
-	// URL redirect configuration
+	// Redirect URLs
 	redirectRules   = make(map[string][]redirectRule)
 	redirectDomains = make(map[string]bool)
 
-	// MITM exclusion configuration
+	// Exclude from MITM
 	excludedDomains = make(map[string]bool)
 
-	// auth exclusion configuration
+	// No dial errors
+	noDialErrorDomains = make(map[string]bool)
+
+	// Exclude from authentication
 	authExcludedDomains = make(map[string]bool)
 
 	allowedIPs   = make(map[string]bool)
@@ -63,26 +66,30 @@ func isIPAllowed(ipmash string) (result bool) {
 }
 
 func httpMain(systemRoots *x509.CertPool, ca tls.Certificate, tlsServerConfig *tls.Config) {
-	// Load redirect rules
+	// redirect rules
 	if err := loadRedirectRules(); err != nil {
 		log.Printf("Error loading redirect rules: %v", err)
 	}
 
-	// Load MITM exclusion rules
+	// MITM exclusion rules
 	if err := loadURLRules("no-mitm.txt", excludedDomains); err != nil {
 		log.Printf("Error loading exclusion rules: %v", err)
 	}
 
+	// No "dial error" rules
+	if err := loadURLRules("no-dial-error.txt", noDialErrorDomains); err != nil {
+		log.Printf("Error loading no dial error rules: %v", err)
+	}
+
+	// auth exclusion rules (deprecated)
 	if _, err := os.Stat("bipas.txt"); os.IsExist(err) {
 		log.Printf("Warning: bipas.txt is deprecated. Rename to auth-bypass.txt.")
 	}
-
-	// Load auth exclusion rules
 	if err := loadURLRules("bipas.txt", authExcludedDomains); err != nil {
 		log.Printf("Error loading bipas rules: %v", err)
 	}
 
-	// Load auth exclusion rules
+	// auth exclusion rules
 	if err := loadURLRules("auth-bypass.txt", authExcludedDomains); err != nil {
 		log.Printf("Error loading auth-bypass rules: %v", err)
 	}
@@ -380,7 +387,8 @@ func (p *HTTPProxy) passthroughConnection(clientConn net.Conn, host string, clie
 	// Connect to the real server
 	serverConn, err := net.Dial("tcp", host)
 	if err != nil {
-		if *debug {
+		a, _, _ := strings.Cut(host, ":")
+		if *debug && !noDialErrorDomains[a] {
 			log.Printf("[%s] Failed to connect to upstream host %s: %v", connID, host, err)
 		}
 		clientConn.Close()
@@ -689,6 +697,7 @@ func (p *HTTPProxy) serveMITM(clientConn net.Conn, host, name string, clientHell
 
 		// If we still have an error (no redirects or redirect failed)
 		if err != nil {
+			a, _, _ := strings.Cut(host, ":")
 			// Only if there's a certificate error, retry to capture the chain
 			var unknownAuthorityErr x509.UnknownAuthorityError
 			if errors.As(err, &unknownAuthorityErr) {
@@ -702,16 +711,16 @@ func (p *HTTPProxy) serveMITM(clientConn net.Conn, host, name string, clientHell
 					// tls.Dial returns a *tls.Conn directly
 					capturedChain = retryConn.ConnectionState().PeerCertificates
 					retryConn.Close()
-					if *debug {
+					if *debug && !noDialErrorDomains[a] {
 						log.Printf("[%s] Failed to connect to upstream host %s: %v%s", name, connID, err, extractCertificateChainInfo(err, capturedChain))
 					}
 				} else {
-					if *debug {
+					if *debug && !noDialErrorDomains[a] {
 						log.Printf("[%s] Failed to connect to upstream host %s: %v", name, connID, err)
 					}
 				}
 			} else {
-				if *debug {
+				if *debug && !noDialErrorDomains[a] {
 					log.Printf("[%s] Failed to connect to upstream host %s: %v", name, connID, err)
 				}
 			}
