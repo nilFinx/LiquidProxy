@@ -106,10 +106,8 @@ func loadGenericTCPRules() error {
 				SRV:  srv,
 			}
 
-			genericTCPRedirectMutex.Lock()
 			genericTCPRedirectRules[fromPort] = append(genericTCPRedirectRules[port], rule)
 			genericTCPRedirectPorts[fromPort] = true
-			genericTCPRedirectMutex.Unlock()
 			fromPort = 0
 		}
 	}

@@ -72,19 +72,15 @@ var (
 	// URL redirect configuration
 	redirectRules   = make(map[string][]redirectRule)
 	redirectDomains = make(map[string]bool)
-	redirectMutex   sync.RWMutex
 
 	genericTCPRedirectRules = make(map[int][]GenericRedirectRule)
 	genericTCPRedirectPorts = make(map[int]bool)
-	genericTCPRedirectMutex sync.RWMutex
 
 	// MITM exclusion configuration
 	excludedDomains = make(map[string]bool)
-	excludedMutex   sync.RWMutex
 
 	// auth exclusion configuration
-	aExcludedDomains = make(map[string]bool)
-	aExcludedMutex   sync.RWMutex
+	authExcludedDomains = make(map[string]bool)
 )
 
 func FileCheck(file string) {

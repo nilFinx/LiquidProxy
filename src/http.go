@@ -121,9 +121,7 @@ func transparentProxy(upstream http.Handler) http.Handler {
 			serveWebUIPlain(w, r)
 			return
 		}
-		aExcludedMutex.RLock()
-		isExcluded := aExcludedDomains[r.Host]
-		aExcludedMutex.RUnlock()
+		isExcluded := authExcludedDomains[r.Host]
 		if !(isExcluded || isIPAllowed(r.RemoteAddr) || (*proxyPassword == "" && !*enforceCert) || !strings.HasSuffix(r.Host, "apple.com")) {
 			pauth := r.Header.Get("Proxy-Authorization")
 			if pauth == "" {
@@ -197,9 +195,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				// If connection fails, check if this is a redirect domain
 				host, _, _ := net.SplitHostPort(addr)
-				redirectMutex.RLock()
 				rules, hasRedirects := redirectRules[host]
-				redirectMutex.RUnlock()
 
 				if hasRedirects && len(rules) > 0 {
 					// Try the first redirect target
@@ -268,9 +264,7 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 
 	notAuthenticated := true
 	if !*enforceCert && *proxyPassword != "" {
-		aExcludedMutex.RLock()
-		isExcluded := aExcludedDomains[r.Host]
-		aExcludedMutex.RUnlock()
+		isExcluded := authExcludedDomains[r.Host]
 		if !(isExcluded || isIPAllowed(r.RemoteAddr) || strings.HasSuffix(r.Host, "apple.com")) {
 			pauth := r.Header.Get("Proxy-Authorization")
 			if pauth == "" {
@@ -333,13 +327,9 @@ func (p *Proxy) serveConnect(w http.ResponseWriter, r *http.Request) {
 		domain = h
 	}
 
-	redirectMutex.RLock()
 	hasRedirects := redirectDomains[domain]
-	redirectMutex.RUnlock()
 
-	excludedMutex.RLock()
 	isExcluded := excludedDomains[domain]
-	excludedMutex.RUnlock()
 
 	// Route based on client capabilities, redirect rules, and exclusion rules
 	if isExcluded {
@@ -600,9 +590,7 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 
 	if notAuthenticated {
 		a, _, _ := strings.Cut(host, ":")
-		aExcludedMutex.RLock()
-		isExcluded := aExcludedDomains[a]
-		aExcludedMutex.RUnlock()
+		isExcluded := authExcludedDomains[a]
 		if !(isExcluded || isIPAllowed(tlsConn.RemoteAddr().String())) {
 			connStat := tlsConn.ConnectionState()
 			if len(connStat.PeerCertificates) == 0 {
@@ -645,9 +633,7 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 			domain = h
 		}
 
-		redirectMutex.RLock()
 		rules, hasRedirects := redirectRules[domain]
-		redirectMutex.RUnlock()
 
 		// If there are redirects, try connecting to the first redirect target
 		if hasRedirects && len(rules) > 0 {
@@ -713,9 +699,7 @@ func (p *Proxy) serveMITM(clientConn net.Conn, host, name string, clientHello *c
 		domain = h
 	}
 
-	redirectMutex.RLock()
 	hasRedirects := redirectDomains[domain]
-	redirectMutex.RUnlock()
 
 	// If URL logging is enabled OR domain has redirects, parse HTTP requests
 	if *logURLs || hasRedirects {

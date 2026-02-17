@@ -66,8 +66,6 @@ func send407(w http.ResponseWriter) {
 
 // checkRedirect checks if the request URL matches any redirect rules and returns the target URL
 func checkRedirect(reqURL *url.URL) (*url.URL, bool) {
-	redirectMutex.RLock()
-	defer redirectMutex.RUnlock()
 
 	// Check if domain has any redirect rules
 	rules, exists := redirectRules[reqURL.Host]
@@ -158,10 +156,8 @@ func loadRedirectRules() error {
 			// Extract domain from fromURL
 			domain := fromURL.Host
 
-			redirectMutex.Lock()
 			redirectRules[domain] = append(redirectRules[domain], rule)
 			redirectDomains[domain] = true
-			redirectMutex.Unlock()
 
 			// Reset for next pair
 			fromURL = nil
@@ -217,10 +213,10 @@ func loadExclusionRules() error {
 			}
 
 			if u.Host != "" {
-				excludedMutex.Lock()
 				excludedDomains[u.Host] = true
-				excludedMutex.Unlock()
-				//log.Printf("Excluding domain from MITM: %s", u.Host)
+				if *debug {
+					log.Printf("Excluding domain from MITM: %s", u.Host)
+				}
 			}
 		} else {
 			// It's just a domain
@@ -230,10 +226,10 @@ func loadExclusionRules() error {
 				domain = h
 			}
 
-			excludedMutex.Lock()
 			excludedDomains[domain] = true
-			excludedMutex.Unlock()
-			//log.Printf("Excluding domain from MITM: %s", domain)
+			if *debug {
+				log.Printf("Excluding domain from MITM: %s", domain)
+			}
 		}
 	}
 
@@ -282,9 +278,7 @@ func loadBipasRules() error {
 			}
 
 			if u.Host != "" {
-				aExcludedMutex.Lock()
-				aExcludedDomains[u.Host] = true
-				aExcludedMutex.Unlock()
+				authExcludedDomains[u.Host] = true
 			}
 		} else {
 			// It's just a domain
@@ -294,9 +288,7 @@ func loadBipasRules() error {
 				domain = h
 			}
 
-			aExcludedMutex.Lock()
-			aExcludedDomains[domain] = true
-			aExcludedMutex.Unlock()
+			authExcludedDomains[domain] = true
 		}
 	}
 
