@@ -4,7 +4,6 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"errors"
 	"flag"
 	"log"
@@ -12,12 +11,23 @@ import (
 	"os/signal"
 	"runtime/pprof"
 	"strings"
-	"sync"
 	"syscall"
 )
 
 var (
 	version = "1.3.3"
+
+	showVersion            = flag.Bool("version", false, "Show version and quit")
+	fail2banOn             = flag.Int("fail2ban-limit", 5, "Ban the IP when the count has been reached")
+	blockRemoteConnections = flag.Bool("block-remote-connections", false, "Block connections from non-localhost addresses")
+	blockModernConnections = flag.Bool("block-modern-connections", false, "Block connections from modern devices (with TLSv1.3 and HTTP/2)")
+
+	allowSSL     = flag.Bool("allow-ssl", false, "Allow SSL 3.0 - TLSv1.1 (insecure)")
+	allowOldTLS  = flag.Bool("alow-old-tls", false, "Allow TLSv1.0&1.1 (insecure)")
+	RSAKeyLength = flag.Int("rsa-key-length", 2048, "RSA key length")
+
+	cpuProfile = flag.Bool("cpu-profile", false, "Enable CPU profiling to legacy_proxy_cpu.prof")
+	debug      = flag.Bool("debug", false, "Enable debug logging (mostly mail only)")
 
 	keyFile          = "LiquidProxy-key.pem"
 	certFile         = "LiquidProxy-cert.pem"
@@ -29,55 +39,21 @@ var (
 	lpHost1 = "liquidproxy.r.e.a.l"
 	lpHost2 = "lp.r.e.a.l"
 
-	RSAKeyLength = 2048
-
-	// Cache for certificates fetched via AIA
-	aiaCertCache  = make(map[string]*x509.Certificate)
-	aiaCacheMutex sync.RWMutex
-
-	// Cache for generated leaf certificates
-	leafCertCache = make(map[string]*tls.Certificate)
-	leafCertMutex sync.RWMutex
-
 	// Pre-generated RSA keys for fast certificate generation
 	keyPool = make(chan *rsa.PrivateKey, 20)
 
-	// Command line flags for HTTP proxy
-	showVersion            = flag.Bool("version", false, "Show version and quit")
-	proxyPassword          = flag.String("proxy-password", "", "Proxy password in username:password format")
-	enforceCert            = flag.Bool("enforce-cert", false, "Enforce cert on HTTP proxy (can be combined with password)")
-	fail2banOn             = flag.Int("fail2ban-limit", 5, "Ban the IP when the count has been reached")
-	forceMITM              = flag.Bool("force-mitm", false, "Force MITM mode for all connections")
-	blockRemoteConnections = flag.Bool("block-remote-connections", false, "Block connections from non-localhost addresses")
-	blockModernConnections = flag.Bool("block-modern-connections", false, "Block connections from modern devices (with TLSv1.3 and HTTP/2)")
-	allowSSL               = flag.Bool("allow-ssl", false, "Allow SSL 3.0 - TLSv1.1 (insecure)")
-	cpuProfile             = flag.Bool("cpu-profile", false, "Enable CPU profiling to legacy_proxy_cpu.prof")
-	logURLs                = flag.Bool("log-urls", false, "Print every URL accessed in MITM mode")
-	debug                  = flag.Bool("debug", false, "Enable debug logging (mostly mail only)")
-	httpPort               = flag.Int("http-port", 6531, "HTTP proxy port")
-	imapSTLSPort           = flag.Int("imap-port", 6532, "IMAP proxy port (STARTTLS)")
-	imapPort               = flag.Int("imap-direct-port", 6534, "IMAP proxy port (direct TLS)")
-	smtpPort               = flag.Int("smtp-port", 6533, "SMTP proxy port")
-	xmppPort               = flag.Int("xmpp-port", 6536, "XMPP proxy port")
-	disableWebUI           = flag.Bool("no-webui", false, "Disable web UI")
-	disableHTTP            = flag.Bool("no-http", false, "Disable HTTP proxy")
-	disableIMAP            = flag.Bool("no-imap-direct", false, "Disable IMAP proxy (direct TLS)")
-	disableIMAPSTARTTLS    = flag.Bool("no-imap", false, "Disable IMAP proxy (STARTTLS)")
-	disableSMTP            = flag.Bool("no-smtp", false, "Disable SMTP proxy")
-	enableXMPP             = flag.Bool("enable-xmpp", false, "Enable XMPP proxy")
-
-	// URL redirect configuration
-	redirectRules   = make(map[string][]redirectRule)
-	redirectDomains = make(map[string]bool)
-
-	genericTCPRedirectRules = make(map[int][]GenericRedirectRule)
-	genericTCPRedirectPorts = make(map[int]bool)
-
-	// MITM exclusion configuration
-	excludedDomains = make(map[string]bool)
-
-	// auth exclusion configuration
-	authExcludedDomains = make(map[string]bool)
+	cipherSuites = []uint16{
+		tls.TLS_RSA_WITH_RC4_128_SHA,      // iOS 6
+		tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA, // iOS 6
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA,      // iOS 6
+		tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA, // iOS 6
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+	}
 )
 
 func FileCheck(file string) {
@@ -157,18 +133,7 @@ func Run() {
 
 	// Configure server side with relaxed security for old OS X clients
 	tlsServerConfig := &tls.Config{
-		CipherSuites: []uint16{
-			tls.TLS_RSA_WITH_RC4_128_SHA,      // iOS 6 has this
-			tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA, // iOS 6 has this
-			tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-			tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-			tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA,      // iOS 6 has this
-			tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA, // iOS 6 has this
-			tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-		},
+		CipherSuites: cipherSuites,
 	}
 
 	if *enforceCert {
@@ -176,6 +141,8 @@ func Run() {
 	}
 	if *allowSSL {
 		tlsServerConfig.MinVersion = tls.VersionSSL30
+	} else if *allowOldTLS {
+		tlsServerConfig.MinVersion = tls.VersionTLS10
 	} else {
 		tlsServerConfig.MinVersion = tls.VersionTLS12
 	}
@@ -190,17 +157,4 @@ func Run() {
 	} else {
 		select {} // Keep the thread running
 	}
-}
-
-// Helper functions for base64 encoding/decoding
-func encodeBase64(s string) string {
-	return base64.StdEncoding.EncodeToString([]byte(s))
-}
-
-func decodeBase64(s string) (string, error) {
-	decoded, err := base64.StdEncoding.DecodeString(s)
-	if err != nil {
-		return "", err
-	}
-	return string(decoded), nil
 }

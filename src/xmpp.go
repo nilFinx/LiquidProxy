@@ -6,12 +6,17 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/xml"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"strings"
-	"time"
+)
+
+var (
+	xmppPort   = flag.Int("xmpp-port", 6536, "XMPP proxy port")
+	enableXMPP = flag.Bool("enable-xmpp", false, "Enable XMPP proxy")
 )
 
 type XMPPProxy struct {
@@ -303,8 +308,6 @@ func (p *XMPPProxy) handleConnection(clientConn net.Conn) {
 			if c.debug {
 				log.Printf("[%s] Handshake should be done now", c.id)
 			}
-			c.transparentProxy(tlsConn)
-			return
 		}
 	}
 	if err != nil {
@@ -313,7 +316,7 @@ func (p *XMPPProxy) handleConnection(clientConn net.Conn) {
 		return
 	}
 
-	c.transparentProxy(tlsConn)
+	transparentProxy(c.id, c.debug, tlsConn, c.serverConn)
 }
 
 func (c *XMPPConnection) connectToServer(tlsConfig *tls.Config, port int, stls bool) (er error, requestsstls bool) {
@@ -383,78 +386,6 @@ func (c *XMPPConnection) connectToServer(tlsConfig *tls.Config, port int, stls b
 	c.serverConn = conn
 
 	return nil, stls
-}
-
-// transparentProxy switches to transparent proxy mode after authentication
-func (c *XMPPConnection) transparentProxy(tlsConn *tls.Conn) {
-	if c.debug {
-		log.Printf("[%s] Switching to transparent proxy mode", c.id)
-	}
-
-	// Verify connections are established
-	if tlsConn == nil {
-		if c.debug {
-			log.Printf("[%s] ERROR: clientConn is nil in transparentProxy", c.id)
-		}
-		return
-	}
-	if c.serverConn == nil {
-		if c.debug {
-			log.Printf("[%s] ERROR: serverConn is nil in transparentProxy", c.id)
-		}
-		return
-	}
-
-	errc := make(chan error, 2)
-
-	go func() {
-		_, err := io.Copy(tlsConn, c.serverConn)
-		errc <- err
-	}()
-
-	go func() {
-		_, err := io.Copy(c.serverConn, tlsConn)
-		errc <- err
-	}()
-
-	err2 := <-errc
-
-	if c.debug {
-		log.Printf("[%s] Close starting", c.id)
-	}
-
-	tlsConn.CloseWrite()
-
-	err1 := <-errc
-
-	ignore := func(err error) bool {
-		if err == nil {
-			return true
-		}
-		s := err.Error()
-		return strings.Contains(s, "use of closed network connection") ||
-			strings.Contains(s, "protocol is shutdown") ||
-			strings.Contains(s, "close_notify") ||
-			strings.Contains(s, "i/o timeout") ||
-			err == io.EOF
-	}
-
-	if !ignore(err1) {
-		log.Printf("[%s] copy error: %v", c.id, err1)
-	}
-	if !ignore(err2) {
-		log.Printf("[%s] copy error: %v", c.id, err2)
-	}
-
-	if c.debug {
-		log.Printf("[%s] Goodbye!", c.id)
-	}
-
-	tlsConn.SetDeadline(time.Time{})
-	c.serverConn.SetDeadline(time.Time{})
-
-	tlsConn.Close()
-	c.serverConn.Close()
 }
 
 func xmppCommandGet(cReader *bufio.Reader, mcid string, conn net.Conn, debug bool) (end bool, data string) {

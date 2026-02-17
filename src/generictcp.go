@@ -15,6 +15,11 @@ import (
 	"time"
 )
 
+var (
+	genericTCPRedirectRules = make(map[int][]GenericRedirectRule)
+	genericTCPRedirectPorts = make(map[int]bool)
+)
+
 type GenericRedirectRule struct {
 	Host string
 	Port int

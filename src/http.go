@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -21,11 +22,29 @@ import (
 	"time"
 )
 
-var clientCALeaf *x509.Certificate
-
 var (
+	httpPort      = flag.Int("http-port", 6531, "HTTP proxy port")
+	disableHTTP   = flag.Bool("no-http", false, "Disable HTTP proxy")
+	disableWebUI  = flag.Bool("no-webui", false, "Disable web UI for HTTP proxy")
+	enforceCert   = flag.Bool("enforce-cert", false, "Enforce client cert on HTTP proxy (not recommended)")
+	proxyPassword = flag.String("proxy-password", "", "HTTP proxy password in username:password format")
+	forceMITM     = flag.Bool("force-mitm", false, "Force MITM mode for all HTTP proxy connections that isn't on no-mitm")
+	logURLs       = flag.Bool("log-urls", false, "Print every URL accessed in MITM mode")
+
+	// URL redirect configuration
+	redirectRules   = make(map[string][]redirectRule)
+	redirectDomains = make(map[string]bool)
+
+	// MITM exclusion configuration
+	excludedDomains = make(map[string]bool)
+
+	// auth exclusion configuration
+	authExcludedDomains = make(map[string]bool)
+
 	allowedIPs   = make(map[string]bool)
 	allowedMutex sync.RWMutex
+
+	clientCALeaf *x509.Certificate
 )
 
 func allowIP(ipmash string) {
@@ -97,7 +116,7 @@ func httpMain(systemRoots *x509.CertPool, ca tls.Certificate, tlsServerConfig *t
 		TLSServerConfig: tlsServerConfig,
 		TLSClientConfig: tlsClientConfig,
 		FlushInterval:   100 * time.Millisecond,
-		Wrap:            transparentProxy,
+		Wrap:            transparentHTTPProxy,
 	}
 
 	log.Printf("HTTP Proxy started (%d)", *httpPort)
@@ -111,7 +130,7 @@ func httpMain(systemRoots *x509.CertPool, ca tls.Certificate, tlsServerConfig *t
 	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(*httpPort), p))
 }
 
-func transparentProxy(upstream http.Handler) http.Handler {
+func transparentHTTPProxy(upstream http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isIPBanned(r.RemoteAddr) {
 			w.WriteHeader(403)
@@ -135,7 +154,7 @@ func transparentProxy(upstream http.Handler) http.Handler {
 					send407(w)
 					return
 				}
-				log.Printf("[%s] Got correct password (transparentProxy)", fmt.Sprintf("%p", r))
+				log.Printf("[%s] Got correct password (transparentHTTPProxy)", fmt.Sprintf("%p", r))
 				allowIP(r.RemoteAddr)
 			}
 		}

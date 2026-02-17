@@ -4,11 +4,17 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"regexp"
 	"strings"
+)
+
+var (
+	smtpPort    = flag.Int("smtp-port", 6533, "SMTP proxy port")
+	disableSMTP = flag.Bool("no-smtp", false, "Disable SMTP proxy")
 )
 
 // handleSMTP handles SMTP protocol specifics

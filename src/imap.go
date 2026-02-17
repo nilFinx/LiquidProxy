@@ -4,12 +4,20 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"strings"
 	"time"
+)
+
+var (
+	imapSTLSPort        = flag.Int("imap-port", 6532, "IMAP proxy port (STARTTLS)")
+	disableIMAPSTARTTLS = flag.Bool("no-imap", false, "Disable IMAP proxy (STARTTLS)")
+	imapPort            = flag.Int("imap-direct-port", 6534, "IMAP proxy port (direct TLS)")
+	disableIMAP         = flag.Bool("no-imap-direct", false, "Disable IMAP proxy (direct TLS)")
 )
 
 func imapCommandGet(cReader *bufio.Reader, mcid string, conn net.Conn, debug bool) (end bool, t string, cmd string, part []string) {
@@ -188,7 +196,7 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection, STARTTLS bool) {
 				}
 
 				// Switch to transparent proxy mode
-				mc.transparentProxy(tlsConn)
+				transparentProxy(mc.id, mc.debug, tlsConn, mc.serverConn)
 				return
 			}
 
@@ -282,7 +290,7 @@ func (mp *MailProxy) handleIMAP(mc *MailConnection, STARTTLS bool) {
 					}
 
 					// Switch to transparent proxy mode
-					mc.transparentProxy(tlsConn)
+					transparentProxy(mc.id, mc.debug, tlsConn, mc.serverConn)
 					return
 				}
 

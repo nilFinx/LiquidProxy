@@ -16,7 +16,18 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
+)
+
+var (
+	// Cache for certificates fetched via AIA
+	aiaCertCache  = make(map[string]*x509.Certificate)
+	aiaCacheMutex sync.RWMutex
+
+	// Cache for generated leaf certificates
+	leafCertCache = make(map[string]*tls.Certificate)
+	leafCertMutex sync.RWMutex
 )
 
 const (
@@ -324,7 +335,7 @@ func startKeyPool() {
 			}
 
 			// Generate a new RSA key only when needed
-			key, err := rsa.GenerateKey(rand.Reader, RSAKeyLength)
+			key, err := rsa.GenerateKey(rand.Reader, *RSAKeyLength)
 			if err != nil {
 				log.Printf("Error pre-generating RSA key: %v", err)
 				time.Sleep(1 * time.Second)
@@ -345,7 +356,7 @@ func getKey() (*rsa.PrivateKey, error) {
 		return key, nil
 	default:
 		// Immediately generate a key if none available
-		return rsa.GenerateKey(rand.Reader, RSAKeyLength)
+		return rsa.GenerateKey(rand.Reader, *RSAKeyLength)
 	}
 }
 
