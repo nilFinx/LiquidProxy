@@ -26,7 +26,7 @@ For first time setup, you also need other-files.zip from releases.
 Now, unzip other-files.zip in the way that all the files inside is next to the file for your OS. It should look like this:
 
 ``` txt
-bipas.txt
+auth-bypass.txt
 create-cert.bat
 create-cert.sh
 example-flags.txt

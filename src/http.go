@@ -69,13 +69,22 @@ func httpMain(systemRoots *x509.CertPool, ca tls.Certificate, tlsServerConfig *t
 	}
 
 	// Load MITM exclusion rules
-	if err := loadExclusionRules(); err != nil {
+	if err := loadURLRules("no-mitm.txt", excludedDomains); err != nil {
 		log.Printf("Error loading exclusion rules: %v", err)
 	}
 
+	if _, err := os.Stat("bipas.txt"); os.IsExist(err) {
+		log.Printf("Warning: bipas.txt is deprecated. Rename to auth-bypass.txt.")
+	}
+
 	// Load auth exclusion rules
-	if err := loadBipasRules(); err != nil {
+	if err := loadURLRules("bipas.txt", authExcludedDomains); err != nil {
 		log.Printf("Error loading bipas rules: %v", err)
+	}
+
+	// Load auth exclusion rules
+	if err := loadURLRules("auth-bypass.txt", authExcludedDomains); err != nil {
+		log.Printf("Error loading auth-bypass rules: %v", err)
 	}
 
 	if *enforceCert {

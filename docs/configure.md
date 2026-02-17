@@ -29,7 +29,7 @@ Enforcing password is as easy as using `--proxy-password=user:password` **and is
 
 Certificate auth is possible, but due to nature of legacy clients... I do not recommend it. Some web browsers are very annoying when enforcing certs. Some refuses to use it.
 
-bipas.txt includes a list of websites to never prompt proxy auth for. Do NOT put common websites like google.com here. Only use this for apps that screams "Please give me password" which it uses account password for proxy password, like Apple's CalDAV/CardDAV daemon.
+auth-bypass.txt includes a list of websites to never prompt proxy auth for. Do NOT put common websites like google.com here. Only use this for apps that screams "Please give me password" which it uses account password for proxy password, like Apple's CalDAV/CardDAV daemon.
 
 ### Notes
 
