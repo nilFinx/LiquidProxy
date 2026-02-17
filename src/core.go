@@ -146,6 +146,9 @@ func Run() {
 	} else {
 		tlsServerConfig.MinVersion = tls.VersionTLS12
 	}
+	if *allowSSL && *allowOldTLS {
+		log.Printf("Warning: -allow-ssl and -allow-tls is detected at the same time. Pick one. (currently using -allow-ssl only	)")
+	}
 
 	genericTCPProxyMain(systemRoots, ca, tlsServerConfig)
 
