@@ -17,9 +17,7 @@ import (
 )
 
 var (
-	version = "1.0.0"
-
-	hostname, _ = os.Hostname()
+	version = "1.3.3"
 
 	keyFile          = "LiquidProxy-key.pem"
 	certFile         = "LiquidProxy-cert.pem"
