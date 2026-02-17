@@ -29,8 +29,7 @@ var (
 	lpHost1 = "liquidproxy.r.e.a.l"
 	lpHost2 = "lp.r.e.a.l"
 
-	// Generated certs are only used between the OS and the proxy. Prioritize speed.
-	RSAKeyLength = 1024
+	RSAKeyLength = 2048
 
 	// Cache for certificates fetched via AIA
 	aiaCertCache  = make(map[string]*x509.Certificate)
