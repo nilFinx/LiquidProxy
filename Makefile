@@ -6,7 +6,7 @@ endif
 all: build
 
 dev:
-	go run main.go $(ARGS)
+	go run . $(ARGS)
 
 # Firewall bypass ish
 windev: build run

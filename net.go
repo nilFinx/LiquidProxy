@@ -1,4 +1,4 @@
-package liquidproxy
+package main
 
 import (
 	"bytes"
@@ -6,11 +6,6 @@ import (
 	"net"
 	"sync"
 )
-
-// copyData copies data between connections without closing them
-func copyData(dst, src net.Conn, connID, direction string) {
-	io.Copy(dst, src)
-}
 
 // singleUseListener implements net.Listener for a single connection
 type singleUseListener struct {

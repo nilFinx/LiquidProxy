@@ -1,4 +1,4 @@
-package liquidproxy
+package main
 
 import (
 	"bufio"

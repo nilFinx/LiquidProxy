@@ -1,0 +1,8 @@
+github.com/BurntSushi/toml v1.6.0 h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk=
+github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
+github.com/Shopify/go-lua v0.0.0-20210302141115-d8ac5566562d h1:t4Z/l2BS7t3Yi/WUhAR+193R1a/lCP6WkNRblY712zo=
+github.com/Shopify/go-lua v0.0.0-20210302141115-d8ac5566562d/go.mod h1:lvS2IGWEGk+KQkRrCXuWlcsHO5BitT0HyhnP51rh3gA=
+github.com/Shopify/go-lua v0.0.0-20250718183320-1e37f32ad7d0 h1:oGlw/+ndlFMn8KWLjEX5nULcDwOC4tJy3Kk1Pm84Cys=
+github.com/Shopify/go-lua v0.0.0-20250718183320-1e37f32ad7d0/go.mod h1:M4CxjVc/1Nwka5atBv7G/sb7Ac2BDe3+FxbiT9iVNIQ=
+github.com/yuin/gopher-lua v1.1.1 h1:kYKnWBjvbNP4XLT3+bPEwAXJx262OhaHDWDVOPjL46M=
+github.com/yuin/gopher-lua v1.1.1/go.mod h1:GBR0iDaNXjAgGg9zfCvksxSRnQx76gclCIb7kdAd1Pw=
