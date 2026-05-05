@@ -1,5 +1,7 @@
 # LiquidProxy
 
+This project has been deprecated in favor of [LPLE](https://codeberg.org/nilFinx/LPLE).
+
 Note: This repository is available in [tangled](https://tangled.org/nilfinx.tngl.sh/LiquidProxy) and [GitHub](https://github.com/nilFinx/LiquidProxy).
 
 LiquidProxy is a fork of [WowFunHappy's Aqua Proxy](https://github.com/wowfunhappy/aquaproxy). which is based on [kr's mitm](https://github.com/kr/mitm)
